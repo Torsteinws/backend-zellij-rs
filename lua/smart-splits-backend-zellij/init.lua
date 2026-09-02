@@ -8,7 +8,7 @@ local M = {
     protocol_version = 3,
     detect = detect,
     move = require('smart-splits-backend-zellij.move').move,
-    -- resize = require("smart-splits-backend-zellij.resize").resize,
+    resize = require('smart-splits-backend-zellij.resize').resize,
     -- split = require("smart-splits-backend-zellij.split").split,
 }
 
