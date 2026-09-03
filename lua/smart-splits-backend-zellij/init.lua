@@ -2,6 +2,12 @@ local function detect()
     return vim.env.ZELLIJ ~= nil
 end
 
+---@param opts? SmartSplits.Zellij.PartialConfig
+local function setup(opts)
+    local config = require('smart-splits-backend-zellij.config')
+    config.setup(opts)
+end
+
 ---@type SmartSplitsBackend
 local M = {
     name = 'smart-splits-backend-zellij',
@@ -9,7 +15,8 @@ local M = {
     detect = detect,
     move = require('smart-splits-backend-zellij.move').move,
     resize = require('smart-splits-backend-zellij.resize').resize,
-    -- split = require("smart-splits-backend-zellij.split").split,
+    setup = setup,
+    -- split = require('smart-splits-backend-zellij.split').split,
 }
 
 return M
