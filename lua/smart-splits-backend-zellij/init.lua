@@ -1,5 +1,7 @@
+local utils = require('smart-splits-backend-zellij.utils')
+
 local function detect()
-    return vim.env.ZELLIJ ~= nil
+    return vim.env.ZELLIJ ~= nil and #vim.env.ZELLIJ > 0 and utils.zellij_bin() ~= nil
 end
 
 ---@param opts? SmartSplits.Zellij.PartialConfig
