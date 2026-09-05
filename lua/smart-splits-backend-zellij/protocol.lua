@@ -1,10 +1,12 @@
 ---@alias SmartSplitsDirection 'left'|'right'|'up'|'down'
 
 ---@class SmartSplitsBackendMoveOpts
+---@field wrap boolean|nil whether wrapping was asked for, from `at_edge`
 
 ---@alias SmartSplitsBackendMove fun(direction: SmartSplitsDirection, opts?: SmartSplitsBackendMoveOpts):boolean
 
 ---@class SmartSplitsBackendResizeOpts
+---@field amount number|nil cells to resize by, already multiplied by `v:count1`
 
 ---@alias SmartSplitsBackendResize fun(direction: SmartSplitsDirection, opts?: SmartSplitsBackendResizeOpts):boolean
 

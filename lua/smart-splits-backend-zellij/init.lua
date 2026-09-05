@@ -1,13 +1,14 @@
-local utils = require('smart-splits-backend-zellij.utils')
-
-local function detect()
-    return vim.env.ZELLIJ ~= nil and #vim.env.ZELLIJ > 0 and utils.zellij_bin() ~= nil
-end
-
+--- Set up configurations
 ---@param opts? SmartSplits.Zellij.PartialConfig
 local function setup(opts)
     local config = require('smart-splits-backend-zellij.config')
     config.setup(opts)
+end
+
+--- Detect if zellij is available in the current environment
+local function detect()
+    local zellij = require('smart-splits-backend-zellij.zellij')
+    return zellij.is_running() and zellij.exists()
 end
 
 ---@type SmartSplitsBackend
