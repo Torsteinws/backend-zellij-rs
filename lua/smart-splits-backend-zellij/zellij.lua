@@ -38,16 +38,18 @@ end
 
 --- Execute a command with zellij
 ---@param args (string|integer)[] command arguments
+---@param opts? vim.SystemOpts
 ---@return string stdout
 ---@return integer code exit code
 ---@return string stderr
-function zellij.exec(args)
+function zellij.exec(args, opts)
     if #args == 0 then
         error('No command provided')
     end
+    opts = opts or { text = false }
 
     local cmd = vim.list_extend({ zellij.bin_name() }, args)
-    local result = vim.system(cmd, { text = true }):wait()
+    local result = vim.system(cmd, opts):wait()
     return result.stdout or '', result.code, result.stderr or ''
 end
 
@@ -73,6 +75,22 @@ end
 ---@return boolean exit_status True if exit code is 0
 function zellij.focus_pane_id(pane_id)
     local _, code = zellij.exec({ 'action', 'focus-pane-id', pane_id })
+    return code == 0
+end
+
+--- Creates a new pane in the given direction
+---@param direction 'right'|'down' Zellij only creates panes right or down
+---@return boolean exit_status True if exit code is 0
+function zellij.new_pane(direction)
+    local _, code = zellij.exec({ 'action', 'new-pane', '--direction', direction })
+    return code == 0
+end
+
+--- Moves the current pane in the given direction
+---@param direction SmartSplitsDirection
+---@return boolean exit_status True if exit code is 0
+function zellij.move_pane(direction)
+    local _, code = zellij.exec({ 'action', 'move-pane', direction })
     return code == 0
 end
 
@@ -121,7 +139,7 @@ end
 
 ---@return ZellijPaneEntry[]
 function zellij.list_panes()
-    local json, code, stderr = zellij.exec({ 'action', 'list-panes', '--json' })
+    local json, code, stderr = zellij.exec({ 'action', 'list-panes', '--json' }, { text = true })
     if code ~= 0 then
         error("'zellij action list-panes --json' exited with code=" .. code .. '\n' .. stderr)
     end

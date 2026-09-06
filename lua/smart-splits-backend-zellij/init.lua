@@ -19,7 +19,7 @@ local M = {
     move = require('smart-splits-backend-zellij.move').try_move,
     resize = require('smart-splits-backend-zellij.resize').resize,
     setup = setup,
-    -- split = require('smart-splits-backend-zellij.split').split,
+    split = require('smart-splits-backend-zellij.split').split,
 }
 
 return M
