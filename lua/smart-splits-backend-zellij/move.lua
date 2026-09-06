@@ -4,32 +4,50 @@ local config = require('smart-splits-backend-zellij.config')
 
 local M = {}
 
----@param direction SmartSplitsDirection
----@return boolean did_move
-local function move_focus_or_tab_or_wrap(direction)
-    local panes = zellij.list_panes()
+---@class ZellijState
+---@field current_pane? ZellijTerminalPane
+---@field panes? ZellijPaneEntry[]
 
-    -- If move_focus_or_tab is true, and there exists multiple tabs, we don't care about wraping.
-    if config.options.move_focus_or_tab == true and (direction == 'left' or direction == 'right') then
-        for _, pane in ipairs(panes) do
-            if pane.tab_position > 0 then
-                return zellij.move_focus_or_tab(direction)
-            end
-        end
+local cache = {} ---@type ZellijState
+
+--- Get the current zellij pane
+---@return ZellijPaneEntry[]
+local function get_all_panes()
+    if cache.panes == nil then
+        cache.panes = zellij.list_panes()
+    end
+    return cache.panes
+end
+
+--- Get a list of all zellij panes in the current session
+---@return ZellijTerminalPane
+local function get_current_pane()
+    if cache.current_pane ~= nil then
+        return cache.current_pane
     end
 
-    -- Find current pane
-    local current_pane ---@type ZellijTerminalPane|nil
     local current_pane_id = tonumber(vim.env.ZELLIJ_PANE_ID)
+    local panes = get_all_panes()
     for _, pane in ipairs(panes) do
         if pane.id == current_pane_id and pane.is_plugin == false then
-            current_pane = pane
+            cache.current_pane = pane
             break
         end
     end
-    if current_pane == nil then
-        return false -- TODO: Throw error?
-    end
+    utils.assert(cache.current_pane ~= nil, 'Failed to find the current pane.')
+
+    return cache.current_pane
+end
+
+local function invalidate_cache()
+    cache = {}
+end
+
+---@param direction SmartSplitsDirection
+---@return boolean did_move
+local function move_focus_or_wrap(direction)
+    local panes = get_all_panes()
+    local current_pane = get_current_pane()
 
     -- Find panes in current tab
     local candidates = {} ---@type ZellijTerminalPane[]
@@ -91,10 +109,7 @@ local function move_focus_or_tab_or_wrap(direction)
             table.insert(opposing_panes, target)
         end
     end
-
-    if #opposing_panes == 0 then
-        return false -- TODO: Should not happen. Throw error?
-    end
+    utils.assert(#opposing_panes ~= 0, 'Failed to find an opposing pane.')
 
     if #opposing_panes == 1 then
         return zellij.focus_pane_id(opposing_panes[1].id)
@@ -119,25 +134,55 @@ local function move_focus_or_tab_or_wrap(direction)
             best_pane = target
         end
     end
-
-    if best_pane == nil then
-        return false -- TODO: Should not happen. Trow error?
-    end
+    utils.assert(best_pane ~= nil, 'Failed to pick the best pane out of multiple options')
 
     return zellij.focus_pane_id(best_pane.id)
 end
 
----@type SmartSplitsBackendMove
-function M.move(direction, opts)
-    if opts.wrap == true then
-        return move_focus_or_tab_or_wrap(direction)
-    elseif config.options.move_focus_or_tab == true then
-        zellij.move_focus_or_tab(direction)
-        return true
-    else
-        zellij.move_focus(direction)
-        return true
+---@param direction SmartSplitsDirection
+---@return boolean
+local function move_focus_or_tab_or_wrap(direction)
+    local panes = get_all_panes()
+
+    -- We can only move to the next tab if the navigation is in a horizontal direction
+    -- and if the current session has more than 1 tabs.
+    if direction == 'left' or direction == 'right' then
+        for _, pane in ipairs(panes) do
+            if pane.tab_position > 0 then
+                return zellij.move_focus_or_tab(direction)
+            end
+        end
     end
+
+    return move_focus_or_wrap(direction)
+end
+
+---@type SmartSplitsBackendMove
+local function move(direction, opts)
+    local move_or_tab = config.options.move_focus_or_tab == true
+    local wrap = opts.wrap == true
+
+    if move_or_tab and wrap then
+        return move_focus_or_tab_or_wrap(direction)
+    elseif wrap then
+        return move_focus_or_wrap(direction)
+    elseif move_or_tab then
+        return zellij.move_focus_or_tab(direction)
+    else
+        return zellij.move_focus(direction)
+    end
+end
+
+---@type SmartSplitsBackendMove
+function M.try_move(direction, opts)
+    invalidate_cache()
+    local ok, result = pcall(move, direction, opts)
+    invalidate_cache()
+    if not ok then
+        vim.notify(tostring(result), vim.log.levels.ERROR)
+        return false
+    end
+    return result
 end
 
 return M
