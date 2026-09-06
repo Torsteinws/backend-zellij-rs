@@ -2,14 +2,17 @@ local M = {}
 
 ---@class SmartSplits.Zellij.Config
 ---@field move_focus_or_tab boolean
+---@field disable_nav_when_zoomed boolean
 
 -- Same as above, but every field is nullable
 ---@class SmartSplits.Zellij.PartialConfig
 ---@field move_focus_or_tab? boolean
+---@field disable_nav_when_zoomed? boolean
 
 ---@type SmartSplits.Zellij.Config
 M.defaults = {
     move_focus_or_tab = false,
+    disable_nav_when_zoomed = false,
 }
 
 ---@type SmartSplits.Zellij.Config

@@ -157,8 +157,21 @@ local function move_focus_or_tab_or_wrap(direction)
     return move_focus_or_wrap(direction)
 end
 
+--- Check if the current pane is zooomed
+---@return boolean
+local function is_zoomed()
+    local current_pane = get_current_pane()
+    return current_pane.is_fullscreen == true
+end
+
 ---@type SmartSplitsBackendMove
 local function move(direction, opts)
+    if config.options.disable_nav_when_zoomed == true then
+        if is_zoomed() then
+            return false
+        end
+    end
+
     local move_or_tab = config.options.move_focus_or_tab == true
     local wrap = opts.wrap == true
 

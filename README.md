@@ -34,6 +34,9 @@ return {
 opts = {
     -- Go to the next tab when navigating to an edge.
     move_focus_or_tab = false,
+
+    -- Disable navigation if the pane is zoomed (fullscreen).
+    disable_nav_when_zoomed = false,
 },
 
 ```
