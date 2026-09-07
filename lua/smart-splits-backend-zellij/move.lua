@@ -7,8 +7,10 @@ local M = {}
 ---@class ZellijState
 ---@field current_pane? ZellijTerminalPane
 ---@field panes? ZellijPaneEntry[]
+---@field current_tab_panes ZellijTerminalPane[]
 
-local cache = {} ---@type ZellijState
+---@type ZellijState
+local cache = {} ---@diagnostic disable-line: missing-fields
 
 --- Get the current zellij pane
 ---@return ZellijPaneEntry[]
@@ -39,39 +41,49 @@ local function get_current_pane()
     return cache.current_pane
 end
 
-local function invalidate_cache()
-    cache = {}
-end
+local function get_current_tab_panes()
+    if cache.current_tab_panes ~= nil then
+        return cache.current_tab_panes
+    end
 
----@param direction SmartSplitsDirection
----@return boolean did_move
-local function move_focus_or_wrap(direction)
     local panes = get_all_panes()
     local current_pane = get_current_pane()
-
-    -- Find panes in current tab
-    local candidates = {} ---@type ZellijTerminalPane[]
+    cache.current_tab_panes = {} ---@type ZellijTerminalPane[]
     for _, pane in ipairs(panes) do
         if
             pane.tab_id == current_pane.tab_id
-            and pane ~= current_pane
             and pane.is_plugin == false
             and pane.is_floating == false
             and pane.is_selectable == true
         then
-            table.insert(candidates, pane)
+            table.insert(cache.current_tab_panes, pane)
         end
     end
-    if #candidates == 0 then
+
+    return cache.current_tab_panes
+end
+
+local function invalidate_cache()
+    cache = {} ---@diagnostic disable-line: missing-fields
+end
+
+---@param direction SmartSplitsDirection
+---@return boolean did_move
+local function move_or_wrap(direction)
+    local current_pane = get_current_pane()
+    local panes = get_current_tab_panes()
+    if #panes <= 1 then
         return false -- Nothing to do, no other panes in tab
     end
 
     -- Check if we can do a normal move instead of a wrap around
     local origin = current_pane
-    for _, target in ipairs(candidates) do
+    for _, target in ipairs(panes) do
         local delta = 0
 
-        if direction == 'left' then
+        if target == origin then
+            -- Invalid target, skip
+        elseif direction == 'left' then
             delta = origin.pane_x - target.pane_x
         elseif direction == 'right' then
             delta = target.pane_x - origin.pane_x
@@ -90,7 +102,7 @@ local function move_focus_or_wrap(direction)
     local opposing_panes = {} --@type ZellijTerminalPane[]
     local largest_delta = 0
     local wrap_direction = utils.reverse(direction)
-    for _, target in ipairs(candidates) do
+    for _, target in ipairs(panes) do
         local delta = 0
         if wrap_direction == 'left' then
             delta = origin.pane_x - target.pane_x
@@ -109,7 +121,7 @@ local function move_focus_or_wrap(direction)
             table.insert(opposing_panes, target)
         end
     end
-    utils.assert(#opposing_panes ~= 0, 'Failed to find an opposing pane.')
+    utils.assert(#opposing_panes > 0, 'Failed to find an opposing pane.')
 
     if #opposing_panes == 1 then
         return zellij.focus_pane_id(opposing_panes[1].id)
@@ -120,9 +132,9 @@ local function move_focus_or_wrap(direction)
     local cursor_x = current_pane.pane_x + current_pane.cursor_coordinates_in_pane[1]
     local cursor_y = current_pane.pane_y + current_pane.cursor_coordinates_in_pane[2]
     local best_pane ---@type ZellijTerminalPane
-    local smallest_delta = 99999999999
+    local smallest_delta = 99999
     for _, target in ipairs(opposing_panes) do
-        local delta = 99999999999
+        local delta = 99999
         if direction == 'left' or direction == 'right' then
             delta = math.abs(cursor_y - target.pane_y - target.cursor_coordinates_in_pane[2])
         elseif direction == 'up' or direction == 'down' then
@@ -141,10 +153,68 @@ end
 
 ---@param direction SmartSplitsDirection
 ---@return boolean
-local function move_focus_or_tab_or_wrap(direction)
-    local panes = get_all_panes()
+local function split_and_focus(direction)
+    local panes = get_current_tab_panes()
+    local current_pane = get_current_pane()
 
-    -- We can only move to the next tab if the navigation is in a horizontal direction
+    -- Check if we can do a normal move instead of a split
+    local origin = current_pane
+    for _, target in ipairs(panes) do
+        local delta = 0
+
+        if target == origin then
+            -- Invalid target, skip
+        elseif direction == 'left' then
+            delta = origin.pane_x - target.pane_x
+        elseif direction == 'right' then
+            delta = target.pane_x - origin.pane_x
+        elseif direction == 'up' then
+            delta = origin.pane_y - target.pane_y
+        elseif direction == 'down' then
+            delta = target.pane_y - origin.pane_y
+        end
+
+        if delta > 0 then
+            return zellij.move_focus(direction)
+        end
+    end
+
+    if direction == 'right' then
+        return zellij.new_pane('right')
+    end
+
+    if direction == 'down' then
+        return zellij.new_pane('down')
+    end
+
+    if direction == 'left' then
+        -- Zellij does not support creating panes to the left.
+        -- We must create one to the right and then swap position.
+        local ok = zellij.new_pane('right')
+        if ok then
+            return zellij.move_pane('left')
+        else
+            return false
+        end
+    end
+
+    if direction == 'up' then
+        -- Same as above: zellij does not support creating panes above
+        local ok = zellij.new_pane('down')
+        if ok then
+            return zellij.move_pane('up')
+        else
+            return false
+        end
+    end
+
+    assert(false, 'Failed to split pane') -- We should never arrive here.
+    return false
+end
+
+local function try_move_or_tab(direction)
+    local panes = get_all_panes()
+    -- we can only move to the next tab if the navigation is in a horizontal direction
     -- and if the current session has more than 1 tabs.
     if direction == 'left' or direction == 'right' then
         for _, pane in ipairs(panes) do
@@ -153,37 +223,42 @@ local function move_focus_or_tab_or_wrap(direction)
             end
         end
     end
-
-    return move_focus_or_wrap(direction)
-end
-
---- Check if the current pane is zooomed
----@return boolean
-local function is_zoomed()
-    local current_pane = get_current_pane()
-    return current_pane.is_fullscreen == true
+    return false
 end
 
 ---@type SmartSplitsBackendMove
 local function move(direction, opts)
-    if config.options.disable_nav_when_zoomed == true then
-        if is_zoomed() then
-            return false
-        end
+    if config.options.disable_nav_when_zoomed == true and get_current_pane().is_fullscreen == true then
+        return false
     end
 
     local move_or_tab = config.options.move_focus_or_tab == true
-    local wrap = opts.wrap == true
 
-    if move_or_tab and wrap then
-        return move_focus_or_tab_or_wrap(direction)
-    elseif wrap then
-        return move_focus_or_wrap(direction)
-    elseif move_or_tab then
-        return zellij.move_focus_or_tab(direction)
-    else
-        return zellij.move_focus(direction)
+    if opts.at_edge == 'wrap' then
+        -- We need to be careful about when we call `try_move_focus_or_tab`.
+        -- It fetches (and caches) the current zellij layout – which is performance expensive.
+        -- However, the wrap function also needs to fetch the current zellij layout.
+        -- It will hit the cache and neglect the performance cost.
+        if move_or_tab and try_move_or_tab(direction) then
+            return true
+        else
+            return move_or_wrap(direction)
+        end
     end
+
+    if opts.at_edge == 'split' then
+        if move_or_tab and try_move_or_tab(direction) then
+            return true
+        else
+            return split_and_focus(direction)
+        end
+    end
+
+    if move_or_tab then
+        return zellij.move_focus_or_tab(direction) -- Fast move - fire and forget
+    end
+
+    return zellij.move_focus(direction) -- Fast move - fire and forget
 end
 
 ---@type SmartSplitsBackendMove

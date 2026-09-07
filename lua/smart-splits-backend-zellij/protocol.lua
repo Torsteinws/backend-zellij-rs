@@ -1,7 +1,7 @@
 ---@alias SmartSplitsDirection 'left'|'right'|'up'|'down'
 
 ---@class SmartSplitsBackendMoveOpts
----@field wrap boolean|nil whether wrapping was asked for, from `at_edge`
+---@field at_edge 'stop'|'wrap'|'split'|nil what to do when there is no pane in the given direction
 
 ---@alias SmartSplitsBackendMove fun(direction: SmartSplitsDirection, opts?: SmartSplitsBackendMoveOpts):boolean
 
@@ -16,10 +16,10 @@
 
 ---@class SmartSplitsBackend
 ---@field name string
----@field protocol_version number
+---@field protocol_version string
 ---@field detect fun():boolean
 ---@field move SmartSplitsBackendMove
 ---@field resize? SmartSplitsBackendResize
----@field split? SmartStplitsBackendSplit
----@field setup? fun()
+---@field activate? fun()
 ---@field health? fun()
+---@field slow_threshold? number in milliseconds, operations taking longer than this will log a warning; default 100ms
