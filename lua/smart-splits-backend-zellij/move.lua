@@ -157,6 +157,15 @@ local function split_and_focus(direction)
     local panes = get_current_tab_panes()
     local current_pane = get_current_pane()
 
+    -- Split does not work with fullscreen - it messes up the coordinates of the panes.
+    -- This is possibly a bug in zellij v0.45.0
+    if current_pane.is_fullscreen == true then
+        zellij.toggle_fullscreen()
+        invalidate_cache()
+        panes = get_current_tab_panes()
+        current_pane = get_current_pane()
+    end
+
     -- Check if we can do a normal move instead of a split
     local origin = current_pane
     for _, target in ipairs(panes) do
@@ -180,36 +189,22 @@ local function split_and_focus(direction)
     end
 
     if direction == 'right' then
-        return zellij.new_pane('right')
-    end
-
-    if direction == 'down' then
-        return zellij.new_pane('down')
-    end
-
-    if direction == 'left' then
+        return zellij.new_pane('right') ~= nil
+    elseif direction == 'down' then
+        return zellij.new_pane('down') ~= nil
+    elseif direction == 'left' then
         -- Zellij does not support creating panes to the left.
         -- We must create one to the right and then swap position.
-        local ok = zellij.new_pane('right')
-        if ok then
-            return zellij.move_pane('left')
-        else
-            return false
-        end
+        local new_pane_id = zellij.new_pane('right')
+        return new_pane_id ~= nil and zellij.move_pane('left', new_pane_id)
+    elseif direction == 'up' then
+        -- Same as above. Create new pane down, then swap
+        local new_pane_id = zellij.new_pane('down')
+        return new_pane_id ~= nil and zellij.move_pane('up', new_pane_id)
+    else
+        assert(false, 'Failed to split pane.') -- We should never arrive here.
+        return false
     end
-
-    if direction == 'up' then
-        -- Same as above: zellij does not support creating panes above
-        local ok = zellij.new_pane('down')
-        if ok then
-            return zellij.move_pane('up')
-        else
-            return false
-        end
-    end
-
-    assert(false, 'Failed to split pane') -- We should never arrive here.
-    return false
 end
 
 local function try_move_or_tab(direction)
@@ -225,6 +220,8 @@ local function try_move_or_tab(direction)
     end
     return false
 end
+
+local last_move_time = 0
 
 ---@type SmartSplitsBackendMove
 local function move(direction, opts)
@@ -246,7 +243,11 @@ local function move(direction, opts)
         end
     end
 
-    if opts.at_edge == 'split' then
+    -- Split causes a bunch of side effect to the zellij state.
+    -- This gets difficult to mannage if the user spams the navigations keys.
+    -- We avoid a plethora of edge casess by just not allowing split to be called if
+    -- there is less than 500 ms since the last key press.
+    if opts.at_edge == 'split' and vim.uv.now() - last_move_time > 500 then
         if move_or_tab and try_move_or_tab(direction) then
             return true
         else
@@ -270,6 +271,7 @@ function M.try_move(direction, opts)
         vim.notify(tostring(result), vim.log.levels.ERROR)
         return false
     end
+    last_move_time = vim.uv.now()
     return result
 end
 

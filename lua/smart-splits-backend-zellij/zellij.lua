@@ -80,17 +80,33 @@ end
 
 --- Creates a new pane in the given direction
 ---@param direction 'right'|'down' Zellij only creates panes right or down
----@return boolean exit_status True if exit code is 0
+---@return integer|nil pane_id The pane_id of the new pane, or nil if the command failed.
 function zellij.new_pane(direction)
-    local _, code = zellij.exec({ 'action', 'new-pane', '--direction', direction })
+    local result, code = zellij.exec({ 'action', 'new-pane', '--direction', direction }, { text = true })
+    if code == 0 then
+        return tonumber(result:match('(%d+)'))
+    else
+        return nil
+    end
+end
+
+--- Moves a pane in the given direction
+---@param direction SmartSplitsDirection
+---@param pane_id? integer The pane to move. Defaults to current pane if omitted.
+---@return boolean exit_status True if exit code is 0
+function zellij.move_pane(direction, pane_id)
+    local args = { 'action', 'move-pane', direction }
+    if pane_id ~= nil then
+        vim.list_extend(args, { '--pane-id', pane_id })
+    end
+    local _, code = zellij.exec(args)
     return code == 0
 end
 
---- Moves the current pane in the given direction
----@param direction SmartSplitsDirection
+--- Toggle fullscreen on current pane
 ---@return boolean exit_status True if exit code is 0
-function zellij.move_pane(direction)
-    local _, code = zellij.exec({ 'action', 'move-pane', direction })
+function zellij.toggle_fullscreen()
+    local _, code = zellij.exec({ 'action', 'toggle-fullscreen' })
     return code == 0
 end
 
