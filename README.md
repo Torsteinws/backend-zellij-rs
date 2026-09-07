@@ -8,20 +8,18 @@ Zellij integration for [smart-splits.nvim](https://github.com/mrjones2014/smart-
 
 ```lua
 return {
-    "mrjones2014/smart-splits.nvim",
-    opts = {
-        mux = {
-            backend = "smart-splits-backend-zellij",
-        },
+  "smart-splits-nvim/smart-splits.nvim",
+  branch = "v3",
+  opts = {
+    mux = {
+      backend = "smart-splits-backend-zellij",
     },
-    dependencies = {
-        {
-            "smart-splits-nvim/smart-splits-backend-zellij"
-            opts = {
-                -- Add zellij configuration here
-            },
-        },
+  },
+  dependencies = {
+    {
+      "smart-splits-nvim/backend-zellij",
     },
+  },
 }
 ```
 
