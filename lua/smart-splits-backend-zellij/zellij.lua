@@ -64,7 +64,7 @@ end
 ---@return boolean exit_status True if exit code is 0
 function zellij.move_focus_or_tab(direction)
     if direction == 'left' or direction == 'right' then
-        local _, code = zellij.exec({ 'action', 'move_focus_or_tab', direction })
+        local _, code = zellij.exec({ 'action', 'move-focus-or-tab', direction })
         return code == 0
     else
         return zellij.move_focus(direction)
