@@ -18,6 +18,9 @@ return {
   dependencies = {
     {
       "smart-splits-nvim/backend-zellij",
+      opts = {
+        -- Add zellij specific configuration here
+      },
     },
   },
 }
@@ -30,11 +33,9 @@ return {
 ```lua
 
 opts = {
-    -- Go to the next tab when navigating to an edge.
-    move_focus_or_tab = false,
+  move_focus_or_tab = false,        -- Go to the next tab when navigating to an edge.
 
-    -- Disable navigation if the pane is zoomed (fullscreen).
-    disable_nav_when_zoomed = false,
+  disable_nav_when_zoomed = false,  -- Disable navigation if the pane is zoomed (fullscreen).
 },
 
 ```
