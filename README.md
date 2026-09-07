@@ -1,5 +1,8 @@
 ## About
 
+> [!WARNING]
+> This is under active development and highly unstable. Breaking changes will occur without warning.
+
 Zellij integration for [smart-splits.nvim](https://github.com/mrjones2014/smart-splits.nvim)
 
 ## Install
