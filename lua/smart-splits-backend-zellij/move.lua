@@ -5,7 +5,7 @@ local config = require('smart-splits-backend-zellij.config')
 local M = {}
 
 ---@class ZellijState
----@field current_pane? ZellijTerminalPane
+---@field nvim_pane? ZellijTerminalPane
 ---@field panes? ZellijPaneEntry[]
 ---@field current_tab_panes ZellijTerminalPane[]
 
@@ -23,35 +23,37 @@ end
 
 --- Get a list of all zellij panes in the current session
 ---@return ZellijTerminalPane
-local function get_current_pane()
-    if cache.current_pane ~= nil then
-        return cache.current_pane
+local function get_nvim_pane()
+    if cache.nvim_pane ~= nil then
+        return cache.nvim_pane
     end
 
     local current_pane_id = tonumber(vim.env.ZELLIJ_PANE_ID)
     local panes = get_all_panes()
     for _, pane in ipairs(panes) do
         if pane.id == current_pane_id and pane.is_plugin == false then
-            cache.current_pane = pane
+            cache.nvim_pane = pane
             break
         end
     end
-    utils.assert(cache.current_pane ~= nil, 'Failed to find the current pane.')
+    utils.assert(cache.nvim_pane ~= nil, 'Failed to find the current pane.')
 
-    return cache.current_pane
+    return cache.nvim_pane
 end
 
+--- Get all panes in the current tab
+---@return ZellijTerminalPane[]
 local function get_current_tab_panes()
     if cache.current_tab_panes ~= nil then
         return cache.current_tab_panes
     end
 
     local panes = get_all_panes()
-    local current_pane = get_current_pane()
+    local nvim = get_nvim_pane()
     cache.current_tab_panes = {} ---@type ZellijTerminalPane[]
     for _, pane in ipairs(panes) do
         if
-            pane.tab_id == current_pane.tab_id
+            pane.tab_id == nvim.tab_id -- We assume that the current nvim pane is in the current tab
             and pane.is_plugin == false
             and pane.is_floating == false
             and pane.is_selectable == true
@@ -140,7 +142,7 @@ end
 ---@param direction SmartSplitsDirection
 ---@return boolean did_move
 local function move_or_wrap(direction)
-    local current_pane = get_current_pane()
+    local nvim = get_nvim_pane()
     local panes = get_current_tab_panes()
     if #panes <= 1 then
         return false -- Nothing to do, no other panes in tab
@@ -148,32 +150,33 @@ local function move_or_wrap(direction)
 
     -- Wrap does not work when we are fullscreen - the pane coordinates are all messed up.
     -- This is possibly a bug in zellij v0.45.0
-    if current_pane.is_fullscreen == true then
+    if nvim.is_fullscreen == true then
         zellij.toggle_fullscreen()
         invalidate_cache()
-        current_pane = get_current_pane()
+        nvim = get_nvim_pane()
         panes = get_current_tab_panes()
     end
 
-    if has_neighbor(current_pane, panes, direction) then
+    if has_neighbor(nvim, panes, direction) then
         return zellij.move_focus(direction)
     end
 
     -- Find all panes that borders the diametrical opposing edge
-    local origin = current_pane
     local opposing_panes = {} --@type ZellijTerminalPane[]
     local largest_delta = 0
     local wrap_direction = utils.reverse(direction)
     for _, target in ipairs(panes) do
         local delta = 0
-        if wrap_direction == 'left' then
-            delta = origin.pane_x - target.pane_x
+        if nvim.id == target.id then
+            delta = -999 -- Invliad target, skip
+        elseif wrap_direction == 'left' then
+            delta = nvim.pane_x - target.pane_x
         elseif wrap_direction == 'right' then
-            delta = target.pane_x + target.pane_columns - origin.pane_x
+            delta = target.pane_x + target.pane_columns - nvim.pane_x
         elseif wrap_direction == 'up' then
-            delta = origin.pane_y - target.pane_y
+            delta = nvim.pane_y - target.pane_y
         elseif wrap_direction == 'down' then
-            delta = target.pane_y + target.pane_rows - origin.pane_y
+            delta = target.pane_y + target.pane_rows - nvim.pane_y
         end
 
         if delta > largest_delta then
@@ -192,9 +195,9 @@ local function move_or_wrap(direction)
     -- We now have multiple panes to choose from. Each equidistant from the current pane.
     -- Tiebreaker: Pick the pane that aligns with the cursor position on the perpendicular axis.
     -- If we can't find the cursor position, use the middle of the pane instead.
-    local cursor = current_pane.cursor_coordinates_in_pane or {}
-    local cursor_x = current_pane.pane_x + (cursor[1] or current_pane.pane_columns / 2)
-    local cursor_y = current_pane.pane_y + (cursor[2] or current_pane.pane_rows / 2)
+    local cursor = nvim.cursor_coordinates_in_pane or {}
+    local cursor_x = nvim.pane_x + (cursor[1] or nvim.pane_columns / 2)
+    local cursor_y = nvim.pane_y + (cursor[2] or nvim.pane_rows / 2)
     for _, target in ipairs(opposing_panes) do
         local is_aligned = false
 
@@ -216,18 +219,18 @@ end
 ---@param direction SmartSplitsDirection
 ---@return boolean
 local function split_and_focus(direction)
-    local current_pane = get_current_pane()
+    local nvim = get_nvim_pane()
 
     -- Split does not work when we are fullscreen - the pane coordinates are all messed up.
     -- This is possibly a bug in zellij v0.45.0
-    if current_pane.is_fullscreen == true then
+    if nvim.is_fullscreen == true then
         zellij.toggle_fullscreen()
         invalidate_cache()
-        current_pane = get_current_pane()
+        nvim = get_nvim_pane()
     end
 
     local panes = get_current_tab_panes()
-    if has_neighbor(current_pane, panes, direction) then
+    if has_neighbor(nvim, panes, direction) then
         return zellij.move_focus(direction)
     end
 
@@ -268,7 +271,7 @@ local last_move_time = 0
 
 ---@type SmartSplitsBackendMove
 local function move(direction, opts)
-    if config.options.fullscreen.block_nav == true and get_current_pane().is_fullscreen == true then
+    if config.options.fullscreen.block_nav == true and get_nvim_pane().is_fullscreen == true then
         return false
     end
 
