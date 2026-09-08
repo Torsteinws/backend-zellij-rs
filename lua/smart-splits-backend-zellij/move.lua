@@ -268,7 +268,7 @@ local last_move_time = 0
 
 ---@type SmartSplitsBackendMove
 local function move(direction, opts)
-    if config.options.disable_nav_when_zoomed == true and get_current_pane().is_fullscreen == true then
+    if config.options.fullscreen.block_nav == true and get_current_pane().is_fullscreen == true then
         return false
     end
 

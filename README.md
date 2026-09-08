@@ -36,9 +36,11 @@ return {
 ```lua
 
 opts = {
-  move_focus_or_tab = false,        -- Go to the next tab when navigating to an edge.
+  move_focus_or_tab = false,  -- Go to the next tab when navigating to an edge.
 
-  disable_nav_when_zoomed = false,  -- Disable navigation if the pane is zoomed (fullscreen).
+  fullscreen = {
+    block_nav = false         -- Block navigation if the current pane is fullscreen
+  }
 },
 
 ```
