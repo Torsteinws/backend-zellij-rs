@@ -34,15 +34,15 @@ return {
 ### Default
 
 ```lua
-
 opts = {
-  move_focus_or_tab = false,  -- Go to the next tab when navigating to an edge.
+  move_cursor = {
+    pane_or_tab = false,   -- Go to the next tab when navigating to an edge.
+  },
 
   fullscreen = {
-    block_nav = false         -- Block navigation if the current pane is fullscreen
-  }
-},
-
+    block_nav = false,    -- Block navigation if the current pane is fullscreen
+  },
+}
 ```
 
 ## Lua API

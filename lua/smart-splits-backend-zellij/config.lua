@@ -1,23 +1,31 @@
 local M = {}
 
 ---@class SmartSplits.Zellij.Config
----@field move_focus_or_tab boolean
+---@field move_cursor SmartSplits.Zellij.Config.Move
 ---@field fullscreen SmartSplits.Zellij.Config.Fullscreen
+
+---@class SmartSplits.Zellij.Config.Move
+---@field pane_or_tab boolean
 
 ---@class SmartSplits.Zellij.Config.Fullscreen
 ---@field block_nav boolean
 
 -- Same as above, but every field is nullable
 ---@class SmartSplits.Zellij.PartialConfig
----@field move_focus_or_tab? boolean
+---@field move_cursor? SmartSplits.Zellij.PartialConfig.Move
 ---@field fullscreen? SmartSplits.Zellij.PartialConfig.Fullscreen
+
+---@class SmartSplits.Zellij.PartialConfig.Move
+---@field pane_or_tab? boolean
 
 ---@class SmartSplits.Zellij.PartialConfig.Fullscreen
 ---@field block_nav? boolean
 
 ---@type SmartSplits.Zellij.Config
 M.defaults = {
-    move_focus_or_tab = false,
+    move_cursor = {
+        pane_or_tab = false,
+    },
     fullscreen = {
         block_nav = false,
     },

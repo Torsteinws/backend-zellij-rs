@@ -275,7 +275,7 @@ local function move(direction, opts)
         return false
     end
 
-    local move_or_tab = config.options.move_focus_or_tab == true
+    local move_or_tab = config.options.move_cursor.pane_or_tab == true
 
     if opts.at_edge == 'wrap' then
         -- We need to be careful about when we call `try_move_focus_or_tab`.
