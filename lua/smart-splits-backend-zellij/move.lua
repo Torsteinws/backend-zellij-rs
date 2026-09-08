@@ -146,6 +146,15 @@ local function move_or_wrap(direction)
         return false -- Nothing to do, no other panes in tab
     end
 
+    -- Wrap does not work when we are fullscreen - the pane coordinates are all messed up.
+    -- This is possibly a bug in zellij v0.45.0
+    if current_pane.is_fullscreen == true then
+        zellij.toggle_fullscreen()
+        invalidate_cache()
+        current_pane = get_current_pane()
+        panes = get_current_tab_panes()
+    end
+
     if has_neighbor(current_pane, panes, direction) then
         return zellij.move_focus(direction)
     end
@@ -182,8 +191,10 @@ local function move_or_wrap(direction)
 
     -- We now have multiple panes to choose from. Each equidistant from the current pane.
     -- Tiebreaker: Pick the pane that aligns with the cursor position on the perpendicular axis.
-    local cursor_x = current_pane.pane_x + current_pane.cursor_coordinates_in_pane[1]
-    local cursor_y = current_pane.pane_y + current_pane.cursor_coordinates_in_pane[2]
+    -- If we can't find the cursor position, use the middle of the pane instead.
+    local cursor = current_pane.cursor_coordinates_in_pane or {}
+    local cursor_x = current_pane.pane_x + (cursor[1] or current_pane.pane_columns / 2)
+    local cursor_y = current_pane.pane_y + (cursor[2] or current_pane.pane_rows / 2)
     for _, target in ipairs(opposing_panes) do
         local is_aligned = false
 
@@ -207,7 +218,7 @@ end
 local function split_and_focus(direction)
     local current_pane = get_current_pane()
 
-    -- Split does not work with fullscreen - it messes up the coordinates of the panes.
+    -- Split does not work when we are fullscreen - the pane coordinates are all messed up.
     -- This is possibly a bug in zellij v0.45.0
     if current_pane.is_fullscreen == true then
         zellij.toggle_fullscreen()
