@@ -67,6 +67,76 @@ local function invalidate_cache()
     cache = {} ---@diagnostic disable-line: missing-fields
 end
 
+--- Check if interval a = [a_start, a_start + a_length) overlaps
+--- interval b = [b_start, b_start + b_length).
+---@param a_start integer start coordinate of interval a
+---@param a_length integer length of interval a
+---@param b_start integer start coordinate of interval b
+---@param b_length integer length of interval b
+---@return boolean
+local function intervals_overlap(a_start, a_length, b_start, b_length)
+    local a_end = a_start + a_length
+    local b_end = b_start + b_length
+    return a_start < b_end and b_start < a_end
+end
+
+--- Check if two panes overlap on a given axis.
+---@param a ZellijTerminalPane
+---@param b ZellijTerminalPane
+---@param axis "x-axis"|"y-axis"
+---@return boolean
+local function axis_overlap(a, b, axis)
+    if axis == 'x-axis' then
+        return intervals_overlap(a.pane_x, a.pane_columns, b.pane_x, b.pane_columns)
+    else
+        return intervals_overlap(a.pane_y, a.pane_rows, b.pane_y, b.pane_rows)
+    end
+end
+
+--- Check if there exists any neighboring panes in the given direction
+---@param origin ZellijTerminalPane The origin pane
+---@param panes ZellijPaneEntry[] The panes to test
+---@param direction SmartSplitsDirection The direction to look
+---@return boolean
+local function has_neighbor(origin, panes, direction)
+    for _, target in ipairs(panes) do
+        if
+            target.id == origin.id
+            or target.tab_id ~= origin.tab_id
+            or target.is_plugin == true
+            or target.is_floating == true
+            or target.is_suppressed == true
+        then
+            goto continue -- Invalid target, skip
+        end
+
+        local in_direction = false -- True if the the pane is in the given direction
+        local is_aligned = false -- True if the pane has any overlaping coordinates on the perpendicular axis
+
+        if direction == 'left' then
+            in_direction = origin.pane_x > target.pane_x
+            is_aligned = axis_overlap(origin, target, 'y-axis')
+        elseif direction == 'right' then
+            in_direction = target.pane_x > origin.pane_x
+            is_aligned = axis_overlap(origin, target, 'y-axis')
+        elseif direction == 'up' then
+            in_direction = origin.pane_y > target.pane_y
+            is_aligned = axis_overlap(origin, target, 'x-axis')
+        elseif direction == 'down' then
+            in_direction = target.pane_y > origin.pane_y
+            is_aligned = axis_overlap(origin, target, 'x-axis')
+        end
+
+        if in_direction and is_aligned then
+            return true
+        end
+
+        ::continue::
+    end
+
+    return false
+end
+
 ---@param direction SmartSplitsDirection
 ---@return boolean did_move
 local function move_or_wrap(direction)
@@ -76,29 +146,12 @@ local function move_or_wrap(direction)
         return false -- Nothing to do, no other panes in tab
     end
 
-    -- Check if we can do a normal move instead of a wrap around
-    local origin = current_pane
-    for _, target in ipairs(panes) do
-        local delta = 0
-
-        if target == origin then
-            -- Invalid target, skip
-        elseif direction == 'left' then
-            delta = origin.pane_x - target.pane_x
-        elseif direction == 'right' then
-            delta = target.pane_x - origin.pane_x
-        elseif direction == 'up' then
-            delta = origin.pane_y - target.pane_y
-        elseif direction == 'down' then
-            delta = target.pane_y - origin.pane_y
-        end
-
-        if delta > 0 then
-            return zellij.move_focus(direction)
-        end
+    if has_neighbor(current_pane, panes, direction) then
+        return zellij.move_focus(direction)
     end
 
     -- Find all panes that borders the diametrical opposing edge
+    local origin = current_pane
     local opposing_panes = {} --@type ZellijTerminalPane[]
     local largest_delta = 0
     local wrap_direction = utils.reverse(direction)
@@ -154,7 +207,6 @@ end
 ---@param direction SmartSplitsDirection
 ---@return boolean
 local function split_and_focus(direction)
-    local panes = get_current_tab_panes()
     local current_pane = get_current_pane()
 
     -- Split does not work with fullscreen - it messes up the coordinates of the panes.
@@ -162,30 +214,12 @@ local function split_and_focus(direction)
     if current_pane.is_fullscreen == true then
         zellij.toggle_fullscreen()
         invalidate_cache()
-        panes = get_current_tab_panes()
         current_pane = get_current_pane()
     end
 
-    -- Check if we can do a normal move instead of a split
-    local origin = current_pane
-    for _, target in ipairs(panes) do
-        local delta = 0
-
-        if target == origin then
-            -- Invalid target, skip
-        elseif direction == 'left' then
-            delta = origin.pane_x - target.pane_x
-        elseif direction == 'right' then
-            delta = target.pane_x - origin.pane_x
-        elseif direction == 'up' then
-            delta = origin.pane_y - target.pane_y
-        elseif direction == 'down' then
-            delta = target.pane_y - origin.pane_y
-        end
-
-        if delta > 0 then
-            return zellij.move_focus(direction)
-        end
+    local panes = get_current_tab_panes()
+    if has_neighbor(current_pane, panes, direction) then
+        return zellij.move_focus(direction)
     end
 
     if direction == 'right' then
