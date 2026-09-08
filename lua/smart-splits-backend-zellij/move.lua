@@ -180,28 +180,26 @@ local function move_or_wrap(direction)
         return zellij.focus_pane_id(opposing_panes[1].id)
     end
 
-    -- We now have multiple panes to choose from. Each are equidistant from the current pane.
-    -- Let's pick the pane that has the smallest curssor distance on the pependicular axis.
+    -- We now have multiple panes to choose from. Each equidistant from the current pane.
+    -- Tiebreaker: Pick the pane that aligns with the cursor position on the perpendicular axis.
     local cursor_x = current_pane.pane_x + current_pane.cursor_coordinates_in_pane[1]
     local cursor_y = current_pane.pane_y + current_pane.cursor_coordinates_in_pane[2]
-    local best_pane ---@type ZellijTerminalPane
-    local smallest_delta = 99999
     for _, target in ipairs(opposing_panes) do
-        local delta = 99999
+        local is_aligned = false
+
         if direction == 'left' or direction == 'right' then
-            delta = math.abs(cursor_y - target.pane_y - target.cursor_coordinates_in_pane[2])
+            is_aligned = target.pane_y <= cursor_y and cursor_y < (target.pane_y + target.pane_rows)
         elseif direction == 'up' or direction == 'down' then
-            delta = math.abs(cursor_x - target.pane_x - target.cursor_coordinates_in_pane[1])
+            is_aligned = target.pane_x <= cursor_x and cursor_x < (target.pane_x + target.pane_columns)
         end
 
-        if delta < smallest_delta then
-            smallest_delta = delta
-            best_pane = target
+        if is_aligned then
+            return zellij.focus_pane_id(target.id)
         end
     end
-    utils.assert(best_pane ~= nil, 'Failed to pick the best pane out of multiple options')
 
-    return zellij.focus_pane_id(best_pane.id)
+    utils.assert(false, 'Failed to pick the best pane out of multiple options') -- We should never arrive here.
+    return false
 end
 
 ---@param direction SmartSplitsDirection
