@@ -15,11 +15,11 @@ end
 local M = {
     name = 'smart-splits-backend-zellij',
     protocol_version = '3.0.0',
-    slow_threshold = 600,
     detect = detect,
     move = require('smart-splits-backend-zellij.move').try_move,
     resize = require('smart-splits-backend-zellij.resize').resize,
     setup = setup,
+    health = require('smart-splits-backend-zellij.health').report,
 }
 
 return M

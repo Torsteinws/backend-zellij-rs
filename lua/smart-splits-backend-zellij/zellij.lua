@@ -53,6 +53,13 @@ function zellij.exec(args, opts)
     return result.stdout or '', result.code, result.stderr or ''
 end
 
+--- Get the output of zellij --version
+---@return string sdtout
+function zellij.version()
+    local result = zellij.exec({ '--version' }, { text = true })
+    return vim.trim(result)
+end
+
 ---@param direction SmartSplitsDirection
 ---@return boolean exit_status True if exit code is 0
 function zellij.move_focus(direction)
