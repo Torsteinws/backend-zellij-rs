@@ -10,7 +10,7 @@ Zellij integration for [smart-splits.nvim](https://github.com/mrjones2014/smart-
 ### Lazy package manager
 
 ```lua
-return {
+{
   "smart-splits-nvim/smart-splits.nvim",
   branch = "v3",
   opts = {
@@ -34,7 +34,7 @@ return {
 ### Default
 
 > [!WARNING]
-> **EXPERIMENTAL** configs are not stable and may break without warning.
+> **EXPERIMENTAL** configs are not stable and may break or be removed without warning.
 
 ```lua
 opts = {
@@ -42,10 +42,22 @@ opts = {
     pane_or_tab = false,    -- Go to the next tab when navigating to an edge.
   },
 
+  split = {
+    left = true,    -- Whether to create a split when navigating to this edge. Only applicable when at_edge is 'split'.
+    right = true,
+    up = true,
+    down = true,
+  }
+
   fullscreen = {
     block_nav = false,          -- Block navigation if the current pane is fullscreen
-    state_after_nav = 'native'  -- **EXPERIMENTAL** 'exit' or 'keep' fullscreen after navigation. 'native' is fastest and produce less screen flickering.
+
+    state_after_nav = 'native'  -- **EXPERIMENTAL** Controls fullscreen state after navigation: 'exit', 'keep', or 'native'
+                                -- 'exit': Exit fullscreen
+                                -- 'keep': Stay in fullscreen
+                                -- 'native': automatically picks whichever of the two is fastest and causes the least screen flicker.
   },
+
 }
 ```
 

@@ -414,6 +414,15 @@ end
 ---@param direction SmartSplitsDirection
 ---@return boolean
 local function handle_split(direction)
+    if
+        (config.options.split.left == false and direction == 'left')
+        or (config.options.split.right == false and direction == 'right')
+        or (config.options.split.up == false and direction == 'up')
+        or (config.options.split.down == false and direction == 'down')
+    then
+        return handle_normal_move(direction)
+    end
+
     -- Split causes a bunch of side effect to the zellij state.
     -- This gets difficult to mannage if the user spams the navigations keys.
     -- We avoid a plethora of edge casess by just not allowing split to be called if
