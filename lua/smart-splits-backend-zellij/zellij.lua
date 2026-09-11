@@ -110,13 +110,29 @@ function zellij.move_pane(direction, pane_id)
     return code == 0
 end
 
---- Toggle fullscreen on current pane
+--- Toggle fullscreen
+---@param pane_id? integer Target a specific pane_id. Defaults to current pane if omitted.
 ---@return boolean exit_status True if exit code is 0
-function zellij.toggle_fullscreen()
-    local _, code = zellij.exec({ 'action', 'toggle-fullscreen' })
+function zellij.toggle_fullscreen(pane_id)
+    local args = { 'action', 'toggle-fullscreen' }
+    if pane_id ~= nil then
+        vim.list_extend(args, { '--pane-id', pane_id })
+    end
+    local _, code = zellij.exec(args)
     return code == 0
 end
 
+--- Toggle fullscreen (including UI bars)
+---@param pane_id? integer Target a specific pane_id. Defaults to current pane if omitted.
+---@return boolean exit_status True if exit code is 0
+function zellij.toggle_no_ui_fullscreen(pane_id)
+    local args = { 'action', 'toggle-no-ui-fullscreen' }
+    if pane_id ~= nil then
+        vim.list_extend(args, { '--pane-id', pane_id })
+    end
+    local _, code = zellij.exec(args)
+    return code == 0
+end
 ---@class ZellijPane
 ---@field id integer Pane id (unique per pane/plugin type)
 ---@field is_plugin boolean
@@ -165,6 +181,37 @@ function zellij.list_panes()
     local json, code, stderr = zellij.exec({ 'action', 'list-panes', '--json' }, { text = true })
     if code ~= 0 then
         error("'zellij action list-panes --json' exited with code=" .. code .. '\n' .. stderr)
+    end
+
+    return vim.json.decode(json, { luanil = { object = true } })
+end
+
+---@class ZellijTabInfo
+---@field position integer                          The tab's 0-indexed position
+---@field name string                               The name of the tab as it appears in the UI (if there's enough room for it)
+---@field active boolean                            Whether this tab is focused
+---@field panes_to_hide integer                     The number of suppressed panes this tab has
+---@field is_fullscreen_active boolean              Whether there's one pane taking up the whole display area on this tab
+---@field is_sync_panes_active boolean              Whether input sent to this tab will be synced to all panes in it
+---@field are_floating_panes_visible boolean
+---@field other_focused_clients integer[]           Client IDs of other clients focused on this tab
+---@field active_swap_layout_name string?           The name of the active swap layout, if any
+---@field is_swap_layout_dirty boolean              Whether the user manually changed the layout, moving out of the swap layout scheme
+---@field viewport_rows integer                     Row count in the viewport (excludes UI bars like the status bar)
+---@field viewport_columns integer                  Column count in the viewport (excludes UI bars)
+---@field display_area_rows integer                 Row count in the display area (includes all panes; typically larger than the viewport)
+---@field display_area_columns integer              Column count in the display area (includes all panes; typically larger than the viewport)
+---@field selectable_tiled_panes_count integer      Number of selectable (non-UI) tiled panes in this tab
+---@field selectable_floating_panes_count integer   Number of selectable (non-UI) floating panes in this tab
+---@field tab_id integer                            The stable identifier for this tab
+---@field has_bell_notification boolean             Whether this tab has an active (persistent) bell notification
+---@field is_flashing_bell boolean                  Whether this tab is currently flashing its bell (transient 400ms state)
+
+---@return ZellijTabInfo
+function zellij.current_tab_info()
+    local json, code, stderr = zellij.exec({ 'action', 'current-tab-info', '--json' }, { text = true })
+    if code ~= 0 then
+        error("'zellij action current-tab-info --json' exited with code=" .. code .. '\n' .. stderr)
     end
 
     return vim.json.decode(json, { luanil = { object = true } })

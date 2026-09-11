@@ -33,14 +33,18 @@ return {
 
 ### Default
 
+> [!WARNING]
+> **EXPERIMENTAL** configs are not stable and may break without warning.
+
 ```lua
 opts = {
   move_cursor = {
-    pane_or_tab = false,   -- Go to the next tab when navigating to an edge.
+    pane_or_tab = false,    -- Go to the next tab when navigating to an edge.
   },
 
   fullscreen = {
-    block_nav = false,    -- Block navigation if the current pane is fullscreen
+    block_nav = false,          -- Block navigation if the current pane is fullscreen
+    state_after_nav = 'native'  -- **EXPERIMENTAL** 'exit' or 'keep' fullscreen after navigation. 'native' is fastest and produce less screen flickering.
   },
 }
 ```

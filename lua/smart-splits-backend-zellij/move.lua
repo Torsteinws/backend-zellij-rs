@@ -8,6 +8,7 @@ local M = {}
 ---@field nvim_pane? ZellijTerminalPane
 ---@field panes? ZellijPaneEntry[]
 ---@field current_tab_panes ZellijTerminalPane[]
+---@field current_tab_info ZellijTabInfo
 
 ---@type ZellijState
 local cache = {} ---@diagnostic disable-line: missing-fields
@@ -19,6 +20,13 @@ local function get_all_panes()
         cache.panes = zellij.list_panes()
     end
     return cache.panes
+end
+
+local function get_current_tab_info()
+    if cache.current_tab_info == nil then
+        cache.current_tab_info = zellij.current_tab_info()
+    end
+    return cache.current_tab_info
 end
 
 --- Get a list of all zellij panes in the current session
@@ -42,6 +50,7 @@ local function get_nvim_pane()
 end
 
 --- Get all panes in the current tab
+--- Assumes that this nvim instance is in the current tab (normally a safe assumption).
 ---@return ZellijTerminalPane[]
 local function get_current_tab_panes()
     if cache.current_tab_panes ~= nil then
@@ -53,7 +62,7 @@ local function get_current_tab_panes()
     cache.current_tab_panes = {} ---@type ZellijTerminalPane[]
     for _, pane in ipairs(panes) do
         if
-            pane.tab_id == nvim.tab_id -- We assume that the current nvim pane is in the current tab
+            pane.tab_id == nvim.tab_id
             and pane.is_plugin == false
             and pane.is_floating == false
             and pane.is_selectable == true
@@ -67,6 +76,69 @@ end
 
 local function invalidate_cache()
     cache = {} ---@diagnostic disable-line: missing-fields
+end
+
+---@alias FullscreenState "none"|"fullscreen"|"no_ui_fullscreen"
+
+---@param pane ZellijTerminalPane
+---@return FullscreenState
+local function get_fullscreen_state(pane)
+    if pane.is_fullscreen == false then
+        return 'none'
+    end
+
+    if pane.pane_x > 0 or pane.pane_y > 0 then
+        return 'fullscreen'
+    end
+
+    local tab = get_current_tab_info()
+    if
+        pane.pane_x <= 0
+        and pane.pane_y <= 0
+        and pane.pane_rows == tab.display_area_rows
+        and pane.pane_columns == tab.display_area_columns
+    then
+        return 'no_ui_fullscreen'
+    else
+        return 'fullscreen'
+    end
+end
+
+---@param next_state FullscreenState
+---@param target { pane?: ZellijTerminalPane, current_state?: FullscreenState }
+local function set_fullscreen_state(next_state, target)
+    utils.assert(
+        not (target.current_state == nil and target.pane == nil),
+        "Not implemented by 'set_fullscreen_state()': target.pane and target.current_state can not both be nil"
+    )
+
+    local current_state = target.current_state or get_fullscreen_state(target.pane)
+    local pane_id = target.pane and target.pane.id or nil
+
+    if current_state == next_state then
+        return -- nothing to do
+    elseif current_state == 'none' and next_state == 'fullscreen' then
+        zellij.toggle_fullscreen(pane_id)
+    elseif current_state == 'none' and next_state == 'no_ui_fullscreen' then
+        zellij.toggle_no_ui_fullscreen(pane_id)
+    elseif current_state == 'fullscreen' and next_state == 'none' then
+        zellij.toggle_fullscreen(pane_id)
+    elseif current_state == 'fullscreen' and next_state == 'no_ui_fullscreen' then
+        zellij.toggle_no_ui_fullscreen(pane_id)
+    elseif current_state == 'no_ui_fullscreen' and next_state == 'none' then
+        zellij.toggle_no_ui_fullscreen(pane_id)
+    elseif current_state == 'no_ui_fullscreen' and next_state == 'fullscreen' then
+        zellij.toggle_fullscreen(pane_id)
+    else
+        -- We should never arrive here.
+        utils.error(
+            'Not implemented case in set_fullscreen_state().\nCan not change:"'
+                .. current_state
+                .. '" --> "'
+                .. next_state
+                .. '"'
+        )
+    end
 end
 
 --- Check if interval a = [a_start, a_start + a_length) overlaps
@@ -148,15 +220,6 @@ local function move_or_wrap(direction)
         return false -- Nothing to do, no other panes in tab
     end
 
-    -- Wrap does not work when we are fullscreen - the pane coordinates are all messed up.
-    -- This is possibly a bug in zellij v0.45.0
-    if nvim.is_fullscreen == true then
-        zellij.toggle_fullscreen()
-        invalidate_cache()
-        nvim = get_nvim_pane()
-        panes = get_current_tab_panes()
-    end
-
     if has_neighbor(nvim, panes, direction) then
         return zellij.move_focus(direction)
     end
@@ -212,7 +275,7 @@ local function move_or_wrap(direction)
         end
     end
 
-    utils.assert(false, 'Failed to pick the best pane out of multiple options') -- We should never arrive here.
+    utils.error('Failed to pick the best pane out of multiple options') -- We should never arrive here.
     return false
 end
 
@@ -221,97 +284,219 @@ end
 local function split_and_focus(direction)
     local nvim = get_nvim_pane()
 
-    -- Split does not work when we are fullscreen - the pane coordinates are all messed up.
-    -- This is possibly a bug in zellij v0.45.0
-    if nvim.is_fullscreen == true then
-        zellij.toggle_fullscreen()
-        invalidate_cache()
-        nvim = get_nvim_pane()
-    end
-
     local panes = get_current_tab_panes()
     if has_neighbor(nvim, panes, direction) then
         return zellij.move_focus(direction)
     end
 
+    local did_split = false
+
     if direction == 'right' then
-        return zellij.new_pane('right') ~= nil
-    elseif direction == 'down' then
-        return zellij.new_pane('down') ~= nil
-    elseif direction == 'left' then
+        did_split = zellij.new_pane('right') ~= nil
+    end
+
+    if direction == 'down' then
+        did_split = zellij.new_pane('down') ~= nil
+    end
+
+    if direction == 'left' then
         -- Zellij does not support creating panes to the left.
         -- We must create one to the right and then swap position.
         local new_pane_id = zellij.new_pane('right')
-        return new_pane_id ~= nil and zellij.move_pane('left', new_pane_id)
-    elseif direction == 'up' then
+        if new_pane_id ~= nil then
+            did_split = zellij.move_pane('left', new_pane_id)
+        else
+            did_split = false
+        end
+    end
+
+    if direction == 'up' then
         -- Same as above. Create new pane down, then swap
         local new_pane_id = zellij.new_pane('down')
-        return new_pane_id ~= nil and zellij.move_pane('up', new_pane_id)
-    else
-        assert(false, 'Failed to split pane.') -- We should never arrive here.
-        return false
+        if new_pane_id ~= nil then
+            did_split = zellij.move_pane('up', new_pane_id)
+        else
+            did_split = false
+        end
     end
+
+    assert(did_split, 'Failed to split pane.')
+
+    return did_split
 end
 
+--- Moves the cursor if more than one tab exists.
+--- Respects fullscreen config.
+---@param direction SmartSplitsDirection
+---@return boolean did_move True if the cursor did move, otherwise false.
 local function try_move_or_tab(direction)
+    if direction == 'up' or direction == 'down' then
+        return false
+    end
+
+    -- Return false if there is only 1 tab
     local panes = get_all_panes()
-    -- we can only move to the next tab if the navigation is in a horizontal direction
-    -- and if the current session has more than 1 tabs.
-    if direction == 'left' or direction == 'right' then
+    local is_multiple_tabs = false
+    for _, pane in ipairs(panes) do
+        if pane.tab_position > 0 then
+            is_multiple_tabs = true
+            break
+        end
+    end
+    if not is_multiple_tabs then
+        return false
+    end
+
+    local result = zellij.move_focus_or_tab(direction)
+
+    -- Exit fullscreen if the user wants us to.
+    -- Otherwise, we are done. (zellij preserves fullscreen by default)
+    if config.options.fullscreen.state_after_nav == 'exit' then
+        invalidate_cache()
+        panes = get_all_panes()
+        local nvim = get_nvim_pane()
         for _, pane in ipairs(panes) do
-            if pane.tab_position > 0 then
-                return zellij.move_focus_or_tab(direction)
+            if
+                pane.is_focused == true
+                and pane.is_fullscreen == true
+                and pane.tab_id == nvim.tab_id
+                and pane.id ~= nvim.id
+                and pane.is_plugin == false
+            then
+                set_fullscreen_state('none', { pane = pane })
+                break
             end
         end
     end
-    return false
+
+    return result
 end
 
 local last_move_time = 0
 
----@type SmartSplitsBackendMove
-local function move(direction, opts)
-    if config.options.fullscreen.block_nav == true and get_nvim_pane().is_fullscreen == true then
-        return false
+--- Entrypoint for normal moves
+---@param direction SmartSplitsDirection
+---@return boolean
+local function handle_normal_move(direction)
+    local move_or_tab = config.options.move_cursor.pane_or_tab == true
+    local result = false
+
+    if move_or_tab then
+        result = zellij.move_focus_or_tab(direction)
+    else
+        result = zellij.move_focus(direction)
     end
 
-    local move_or_tab = config.options.move_cursor.pane_or_tab == true
-
-    if opts.at_edge == 'wrap' then
-        -- We need to be careful about when we call `try_move_focus_or_tab`.
-        -- It fetches (and caches) the current zellij layout – which is performance expensive.
-        -- However, the wrap function also needs to fetch the current zellij layout.
-        -- It will hit the cache and neglect the performance cost.
-        if move_or_tab and try_move_or_tab(direction) then
-            return true
-        else
-            return move_or_wrap(direction)
+    -- Exit fullscreen if the user wants us to.
+    -- Otherwise, we are done. (zellij preserves fullscreen by default)
+    if config.options.fullscreen.state_after_nav == 'exit' then
+        invalidate_cache()
+        local panes = get_all_panes()
+        local nvim = get_nvim_pane()
+        for _, pane in ipairs(panes) do
+            if
+                pane.is_focused == true
+                and pane.is_fullscreen == true
+                and pane.tab_id == nvim.tab_id
+                and pane.id ~= nvim.id
+                and pane.is_plugin == false
+            then
+                set_fullscreen_state('none', { pane = pane })
+                break
+            end
         end
     end
 
+    return result
+end
+
+--- Entrypoint for split moves
+---@param direction SmartSplitsDirection
+---@return boolean
+local function handle_split(direction)
     -- Split causes a bunch of side effect to the zellij state.
     -- This gets difficult to mannage if the user spams the navigations keys.
     -- We avoid a plethora of edge casess by just not allowing split to be called if
     -- there is less than 500 ms since the last key press.
-    if opts.at_edge == 'split' and vim.uv.now() - last_move_time > 500 then
-        if move_or_tab and try_move_or_tab(direction) then
-            return true
-        else
-            return split_and_focus(direction)
+    if vim.uv.now() - last_move_time <= 500 then
+        return handle_normal_move(direction)
+    end
+
+    if config.options.move_cursor.pane_or_tab == true then
+        local did_move = try_move_or_tab(direction)
+        if did_move then
+            return did_move
         end
     end
 
-    if move_or_tab then
-        return zellij.move_focus_or_tab(direction) -- Fast move - fire and forget
+    -- Split does not work when we are fullscreen - it messes up the layout coodrinates
+    -- This is possibly a bug in zellij v0.45.0
+    local prev_fullscreen_state = 'none' ---@type FullscreenState
+    local nvim = get_nvim_pane()
+    if nvim.is_fullscreen == true then
+        prev_fullscreen_state = get_fullscreen_state(nvim)
+        set_fullscreen_state('none', { pane = nvim })
+        invalidate_cache()
     end
 
-    return zellij.move_focus(direction) -- Fast move - fire and forget
+    local result = split_and_focus(direction)
+
+    if prev_fullscreen_state ~= 'none' and config.options.fullscreen.state_after_nav == 'keep' then
+        set_fullscreen_state(prev_fullscreen_state, { current_state = 'none' })
+    end
+
+    return result
+end
+
+--- Entrypoint for wrap moves
+---@param direction SmartSplitsDirection
+---@return boolean
+local function handle_wrap(direction)
+    if config.options.move_cursor.pane_or_tab == true then
+        local did_move = try_move_or_tab(direction)
+        if did_move then
+            return did_move
+        end
+    end
+
+    -- Wrap does not work when we are fullscreen - it messes up the layout coodrinates
+    -- This is possibly a bug in zellij v0.45.0
+    local prev_fullscreen_state = 'none' ---@type FullscreenState
+    local nvim = get_nvim_pane()
+    if nvim.is_fullscreen == true then
+        prev_fullscreen_state = get_fullscreen_state(nvim)
+        set_fullscreen_state('none', { pane = nvim })
+        invalidate_cache()
+    end
+
+    local result = move_or_wrap(direction)
+
+    if prev_fullscreen_state ~= 'none' and config.options.fullscreen.state_after_nav == 'keep' then
+        set_fullscreen_state(prev_fullscreen_state, { current_state = 'none' })
+    end
+
+    return result
+end
+
+---@type SmartSplitsBackendMove
+local function handle_move(direction, opts)
+    if config.options.fullscreen.block_nav == true and get_nvim_pane().is_fullscreen == true then
+        return false
+    end
+
+    if opts.at_edge == 'wrap' then
+        return handle_wrap(direction)
+    elseif opts.at_edge == 'split' then
+        return handle_split(direction)
+    else
+        return handle_normal_move(direction)
+    end
 end
 
 ---@type SmartSplitsBackendMove
 function M.try_move(direction, opts)
     invalidate_cache()
-    local ok, result = pcall(move, direction, opts)
+    local ok, result = pcall(handle_move, direction, opts)
     invalidate_cache()
     if not ok then
         vim.notify(tostring(result), vim.log.levels.ERROR)

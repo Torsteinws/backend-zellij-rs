@@ -19,4 +19,8 @@ function M.assert(condition, message)
     )
 end
 
+function M.error(message)
+    M.assert(false, message)
+end
+
 return M
