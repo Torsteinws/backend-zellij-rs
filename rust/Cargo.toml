@@ -1,0 +1,8 @@
+[package]
+name = "smart-splits-backend-zellij-rs"
+version = "0.1.0"
+authors = ["Torstein Wilhelmsen Sandvik git@torsteinws.no"]
+edition = "2018"
+
+[dependencies]
+zellij-tile = "0.45.1"

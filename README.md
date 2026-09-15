@@ -1,47 +1,28 @@
 ## About
 
 > [!WARNING]
-> This is under active development and highly unstable. Breaking changes will occur without warning.
+> This is under development and currently broken.
 
-Zellij integration for [smart-splits.nvim](https://github.com/mrjones2014/smart-splits.nvim)
+Zellij integration for [smart-splits.nvim](https://github.com/mrjones2014/smart-splits.nvim), written in rust.
 
 ## Install
 
 ### Lazy package manager
 
-```lua
-{
-  "smart-splits-nvim/smart-splits.nvim",
-  branch = "v3",
-  opts = {
-    mux = {
-      backend = "smart-splits-backend-zellij",
-    },
-  },
-  dependencies = {
-    {
-      "smart-splits-nvim/backend-zellij",
-      opts = {
-        -- Add zellij specific configuration here
-      },
-    },
-  },
-}
-```
+TODO...
 
 ## Configuration
 
 ### Default
 
-> [!WARNING]
-> **EXPERIMENTAL** configs are not stable and may break or be removed without warning.
+<!-- > [!WARNING] -->
+<!-- > **EXPERIMENTAL** configs are not stable and may break or be removed without warning. -->
 
 ```lua
 opts = {
   -- General behavior when moving cursor.
   move_cursor = {
     pane_or_tab = false,            -- Go to the next tab when navigating to an edge.
-    maximize_nav_speed = false      -- Convenience flag for fastest possible cursor movement. Forcefully overrides any user configuration that negatively impact cursor movement.
   },
 
   -- Behavior when at_edge is 'split'

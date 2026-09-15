@@ -1,4 +1,4 @@
-local zellij = require('smart-splits-backend-zellij.zellij')
+local zellij = require('smart-splits-backend-zellij-rs.zellij')
 
 local M = {}
 

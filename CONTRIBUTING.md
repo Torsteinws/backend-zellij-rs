@@ -1,29 +1,20 @@
-# Benchmarking
+# Rust plugin
 
-- Benchmarks are located in [tests/bench/](tests/bench/).
-- The local environment influences the benchmark results.  
-  Thus, the results can not be compared across different environments.
+## Prerequisites
 
-**Bench move.lua**
+- [Rust and cargo](https://doc.rust-lang.org/cargo/getting-started/installation.html)
+- `wasm32-wasip1` – can be added with `rustup target add wasm32-wasip1`
 
-- Setup: run inside a vertical split in Zellij.
+## Quickstart dev
 
-    ```console
-    nvim -l tests/bench/move.lua
-    ```
-
-**Bench resize.lua**
-
-- Setup: run inside a vertical split in Zellij.
+1. Start zellij
+2. Open dev environment in current tab
 
     ```console
-    nvim -l tests/bench/move.lua
+     zellij action override-layout --apply-only-to-active-tab ./zellij.kdl
     ```
 
-**Run all benchmarks**
+The layout has 2 floating panes:
 
-- Setup: run inside a vertical split in Zellij.
-
-    ```console
-    nvim -l tests/bench/all.lua
-    ```
+1. The plugin instance.
+2. A command pane for building and reloading the plugin. Focus the pane and type enter to run command.
