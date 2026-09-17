@@ -1791,6 +1791,7 @@ checksum = "ba467056f1b547ed52077911161fc86985becbc60e8e1857c8a144dab0def891"
 name = "smart-splits-backend-zellij-rs"
 version = "0.1.0"
 dependencies = [
+ "thiserror 2.0.20",
  "zellij-tile",
 ]
 

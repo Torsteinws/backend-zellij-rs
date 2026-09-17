@@ -1,3 +1,6 @@
+mod cli;
+mod types;
+
 use std::collections::BTreeMap;
 use zellij_tile::prelude::*;
 
@@ -44,7 +47,15 @@ impl ZellijPlugin for State {
             return false;
         }
 
-        // TODO: Add commands here
+        let cmd = match cli::parse_input(&pipe_message) {
+            Ok(cmd) => cmd,
+            Err(err) => {
+                eprintln!("{err}");
+                return false;
+            }
+        };
+
+        eprintln!("{:#?}", cmd);
 
         false
     }
@@ -52,6 +63,7 @@ impl ZellijPlugin for State {
     fn render(&mut self, _rows: usize, _cols: usize) {}
 }
 
+#[allow(unused)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum FullscreenState {
     Normal,
@@ -59,6 +71,7 @@ enum FullscreenState {
     NoUiFullscreen,
 }
 
+#[allow(unused)]
 fn get_fullscreen_state(pane: &PaneInfo, tab: &TabInfo) -> FullscreenState {
     if !pane.is_fullscreen {
         return FullscreenState::Normal;
@@ -75,6 +88,7 @@ fn get_fullscreen_state(pane: &PaneInfo, tab: &TabInfo) -> FullscreenState {
     }
 }
 
+#[allow(unused)]
 fn set_fullscreen_state(current_state: FullscreenState, next_state: FullscreenState) {
     use FullscreenState::*;
     match (current_state, next_state) {

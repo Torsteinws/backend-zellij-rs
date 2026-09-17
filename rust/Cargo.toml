@@ -5,4 +5,5 @@ authors = ["Torstein Wilhelmsen Sandvik git@torsteinws.no"]
 edition = "2018"
 
 [dependencies]
+thiserror = "2.0.20"
 zellij-tile = "0.45.1"
