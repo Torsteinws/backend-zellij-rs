@@ -1,8 +1,12 @@
 mod cli;
-mod types;
+mod fullscreen_state;
+mod move_cursor_action;
+use crate::move_cursor_action::{MoveCursorAction, TabBehavior};
 
 use std::collections::BTreeMap;
 use zellij_tile::prelude::*;
+
+use crate::cli::Command;
 
 #[derive(Default)]
 struct State {
@@ -55,50 +59,20 @@ impl ZellijPlugin for State {
             }
         };
 
-        eprintln!("{:#?}", cmd);
+        let mover = MoveCursorAction::new(&self.tabs, &self.pane_manifest, &cmd.options);
+        match cmd.command {
+            Command::MoveFocus => mover.normal_move(cmd.direction, TabBehavior::Stop),
+            Command::MoveFocusOrTab => mover.normal_move(cmd.direction, TabBehavior::Move),
+
+            Command::MoveFocusOrWrap => mover.move_or_wrap(cmd.direction, TabBehavior::Stop),
+            Command::MoveFocusOrTabOrWrap => mover.move_or_wrap(cmd.direction, TabBehavior::Move),
+
+            Command::MoveFocusOrSplit => mover.move_or_split(cmd.direction, TabBehavior::Stop),
+            Command::MoveFocusOrTabOrSplit => mover.move_or_split(cmd.direction, TabBehavior::Move),
+        }
 
         false
     }
 
     fn render(&mut self, _rows: usize, _cols: usize) {}
-}
-
-#[allow(unused)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum FullscreenState {
-    Normal,
-    Fullscreen,
-    NoUiFullscreen,
-}
-
-#[allow(unused)]
-fn get_fullscreen_state(pane: &PaneInfo, tab: &TabInfo) -> FullscreenState {
-    if !pane.is_fullscreen {
-        return FullscreenState::Normal;
-    }
-
-    if pane.pane_x == 0
-        && pane.pane_y == 0
-        && pane.pane_rows == tab.display_area_rows
-        && pane.pane_columns == tab.display_area_columns
-    {
-        FullscreenState::NoUiFullscreen
-    } else {
-        FullscreenState::Fullscreen
-    }
-}
-
-#[allow(unused)]
-fn set_fullscreen_state(current_state: FullscreenState, next_state: FullscreenState) {
-    use FullscreenState::*;
-    match (current_state, next_state) {
-        (Normal, Fullscreen) => toggle_focus_fullscreen(),
-        (Normal, NoUiFullscreen) => toggle_focus_no_ui_fullscreen(),
-        (Fullscreen, Normal) => toggle_focus_fullscreen(),
-        (Fullscreen, NoUiFullscreen) => toggle_focus_no_ui_fullscreen(),
-        (NoUiFullscreen, Normal) => toggle_focus_no_ui_fullscreen(),
-        (NoUiFullscreen, Fullscreen) => toggle_focus_fullscreen(),
-
-        (Normal, Normal) | (Fullscreen, Fullscreen) | (NoUiFullscreen, NoUiFullscreen) => {}
-    }
 }

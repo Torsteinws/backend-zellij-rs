@@ -11,6 +11,11 @@ local function detect()
     return zellij.is_running() and zellij.exists()
 end
 
+local function activate()
+    local zellij_plugin = require('smart-splits-backend-zellij-rs.zellij_plugin')
+    zellij_plugin.start_or_reload()
+end
+
 ---@type SmartSplitsBackend
 local M = {
     name = 'smart-splits-backend-zellij-rs',
@@ -20,6 +25,7 @@ local M = {
     resize = require('smart-splits-backend-zellij-rs.resize').resize,
     setup = setup,
     health = require('smart-splits-backend-zellij-rs.health').report,
+    activate = activate,
 }
 
 return M

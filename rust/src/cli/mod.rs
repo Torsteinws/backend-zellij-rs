@@ -2,7 +2,7 @@ mod command;
 pub use command::Command;
 pub use command::UnknownCommand;
 
-mod options;
+pub mod options;
 pub use options::Options;
 pub use options::ParseFullscreenBehaviorError;
 

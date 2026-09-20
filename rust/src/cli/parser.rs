@@ -1,14 +1,14 @@
 use crate::cli::{self, Options, ParseFullscreenBehaviorError, UnknownCommand};
-use crate::types;
 use std::collections::BTreeMap;
 use thiserror::Error;
+use zellij_tile::prelude::Direction;
 
 use zellij_tile::prelude::PipeMessage;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ParsedCommand {
     pub command: cli::Command,
-    pub direction: types::Direction,
+    pub direction: Direction,
     pub options: cli::Options,
 }
 
@@ -18,7 +18,11 @@ pub fn parse_input(pipe_message: &PipeMessage) -> Result<ParsedCommand, ParseErr
     let Some(payload) = pipe_message.payload.as_ref() else {
         return Err(ParseError::MissingPayload);
     };
-    let direction: types::Direction = payload.parse()?;
+
+    let direction: Direction = match payload.parse() {
+        Ok(direction) => direction,
+        Err(err) => return Err(ParseError::InvalidPayload(err)),
+    };
 
     let options = parse_options(&pipe_message.args)?;
 
@@ -74,10 +78,9 @@ pub enum ParseError {
     #[error("missing payload: expected one of \"left\", \"right\", \"up\", \"down\"")]
     MissingPayload,
 
-    #[error("invalid payload. Reason: {0}")]
-    InvalidPayload(#[from] types::ParseDirectionError),
+    #[error("Invalid payload. Reason: {0}")]
+    InvalidPayload(String),
 
-    // #[error(transparent)]
     #[error("invalid value for fulsccreen. \nReason: {0}")]
     InvalidFullscreenValue(#[from] ParseFullscreenBehaviorError),
 

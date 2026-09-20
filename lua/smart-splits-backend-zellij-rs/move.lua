@@ -1,5 +1,6 @@
 local zellij = require('smart-splits-backend-zellij-rs.zellij')
 local config = require('smart-splits-backend-zellij-rs.config')
+local zellij_plugin = require('smart-splits-backend-zellij-rs.zellij_plugin')
 
 local M = {}
 
@@ -9,8 +10,7 @@ local last_move_time = 0
 ---@param direction SmartSplitsDirection
 ---@return boolean
 local function handle_native_move(direction)
-    local move_or_tab = config.options.move_cursor.pane_or_tab == true
-    if move_or_tab then
+    if config.options.move_cursor.pane_or_tab == true then
         return zellij.move_focus_or_tab(direction)
     else
         return zellij.move_focus(direction)
@@ -21,7 +21,11 @@ end
 ---@param direction SmartSplitsDirection
 ---@return boolean
 local function handle_normal_move(direction)
-    return false
+    if config.options.move_cursor.pane_or_tab == true then
+        return zellij_plugin.move_focus_or_tab(direction)
+    else
+        return zellij_plugin.move_focus(direction)
+    end
 end
 
 --- Entrypoint for split moves
@@ -45,14 +49,22 @@ local function handle_split(direction)
         return handle_normal_move(direction)
     end
 
-    return false
+    if config.options.move_cursor.pane_or_tab == true then
+        return zellij_plugin.move_focus_or_tab_or_split(direction)
+    else
+        return zellij_plugin.move_focus_or_split(direction)
+    end
 end
 
 --- Entrypoint for wrap moves
 ---@param direction SmartSplitsDirection
 ---@return boolean
 local function handle_wrap(direction)
-    return false
+    if config.options.move_cursor.pane_or_tab == true then
+        return zellij_plugin.move_focus_or_tab_wrap(direction)
+    else
+        return zellij_plugin.move_focus_or_wrap(direction)
+    end
 end
 
 ---@type SmartSplitsBackendMove
