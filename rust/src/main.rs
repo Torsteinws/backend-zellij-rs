@@ -60,7 +60,7 @@ impl ZellijPlugin for State {
         };
 
         let mover = MoveCursorAction::new(&self.tabs, &self.pane_manifest, &cmd.options);
-        match cmd.command {
+        let result = match cmd.command {
             Command::MoveFocus => mover.normal_move(cmd.direction, TabBehavior::Stop),
             Command::MoveFocusOrTab => mover.normal_move(cmd.direction, TabBehavior::Move),
 
@@ -69,6 +69,10 @@ impl ZellijPlugin for State {
 
             Command::MoveFocusOrSplit => mover.move_or_split(cmd.direction, TabBehavior::Stop),
             Command::MoveFocusOrTabOrSplit => mover.move_or_split(cmd.direction, TabBehavior::Move),
+        };
+
+        if let Err(err) = result {
+            eprint!("ERROR: {0}", err)
         }
 
         false
