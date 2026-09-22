@@ -18,7 +18,6 @@ pub struct MoveCursorAction<'a> {
     pane_candidates: OnceCell<Vec<&'a PaneInfo>>, // All possible navigation targets
 }
 
-#[expect(clippy::enum_variant_names)]
 #[derive(Error, Debug, Clone, PartialEq, Eq)]
 pub enum MoveCursorError {
     #[error("current zellij tab was not found")]
@@ -29,6 +28,9 @@ pub enum MoveCursorError {
 
     #[error("did not find any zellij panes in the current tab")]
     CurrentTabPanesNotFound,
+
+    #[error("reached a code path that should be unreachable.\n{0}")]
+    ReachedUnreachableCodePath(&'static str),
 }
 
 impl<'a> MoveCursorAction<'a> {
@@ -93,12 +95,7 @@ impl<'a> MoveCursorAction<'a> {
             tab_panes
                 .iter()
                 .filter(|p| {
-                    !p.is_plugin
-                        && p.is_selectable
-                        && !p.is_floating
-                        && !p.is_suppressed
-                        && !p.is_floating
-                        && p.id != current_pane.id
+                    p.is_selectable && !p.is_suppressed && !p.is_floating && p.id != current_pane.id
                 })
                 .collect()
         });
@@ -188,16 +185,26 @@ impl<'a> MoveCursorAction<'a> {
             return Ok(());
         }
 
-        // Find all panes that borders the diametrical opposing edge
+        // Find all panes that borders the diametrical opposing edge,
+        // and aligns with the current pane.
         let opposing_panes = {
             let mut result: Vec<&PaneInfo> = Vec::new();
             let mut largest_delta = 0;
+            let origin = self.get_current_pane_geometry()?;
 
             let wrap_direction = direction.invert();
-            let origin = self.get_current_pane_geometry()?;
 
             for pane in candidates {
                 let target = Rect::from_pane(pane);
+
+                // Target must align with the current pane to be valid.
+                let is_aligned = match wrap_direction {
+                    Direction::Left | Direction::Right => target.rows_overlap(&origin), // Moving horizontally, target must have overlaping rows
+                    Direction::Up | Direction::Down => target.cols_overlap(&origin), // Moving vertically, target must have overlapping columns
+                };
+                if !is_aligned {
+                    continue;
+                }
 
                 let delta = match wrap_direction {
                     Direction::Left => origin.x - target.x,
@@ -221,15 +228,10 @@ impl<'a> MoveCursorAction<'a> {
             return Ok(());
         }
 
-        if let [pane] = opposing_panes.as_slice() {
-            focus_terminal_pane(pane.id, false, false);
-            return Ok(());
-        }
-
-        // We now have multiple panes to choose from. Each equidistant from the current pane.
-        // Tiebreaker: Pick the pane that aligns with the cursor position on the perpendicular axis.
+        // We have all panes on the oppsoing edge.
+        // Let's pick the pane that matches the current cursor location.
         let cursor = self.get_current_cursor()?;
-        for pane in opposing_panes {
+        for pane in &opposing_panes {
             let target = Rect::from_pane(pane);
 
             let is_aligned = match direction {
@@ -247,7 +249,9 @@ impl<'a> MoveCursorAction<'a> {
             }
         }
 
-        unreachable!("Failed to pick the best pane out of multiple options")
+        Err(MoveCursorError::ReachedUnreachableCodePath(
+            "Failed to pick a wrap target out of multiple valid panes.",
+        ))
     }
 
     fn candidate_exists(&self, direction: Direction) -> Result<bool, MoveCursorError> {
@@ -309,7 +313,6 @@ struct Rect {
     rows: isize,
 }
 
-#[expect(unused)]
 impl Rect {
     pub fn from_pane(pane: &PaneInfo) -> Rect {
         Rect {
@@ -350,16 +353,6 @@ impl Rect {
 
     pub fn rows_overlap(&self, rect: &Rect) -> bool {
         self.y < rect.bottom() && rect.y < self.bottom()
-    }
-
-    pub fn cols_contain(&self, x: isize) -> bool {
-        // self.x <= x && x <= self.right()
-        self.x <= x && x < self.right()
-    }
-
-    pub fn rows_contain(&self, y: isize) -> bool {
-        // self.y <= y && y <= self.bottom()
-        self.y <= y && y < self.bottom()
     }
 }
 
