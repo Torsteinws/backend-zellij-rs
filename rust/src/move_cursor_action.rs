@@ -1,12 +1,10 @@
+use crate::cli::options;
+use crate::cli::Options;
+use crate::fullscreen_state::*;
+use crate::utils;
 use std::cell::OnceCell;
 use thiserror::Error;
 use zellij_tile::prelude::*;
-
-use crate::cli::options;
-use crate::cli::Options;
-use crate::fullscreen_state::get_fullscreen_state;
-use crate::fullscreen_state::set_fullscreen_state;
-use crate::fullscreen_state::FullscreenState;
 
 pub struct MoveCursorAction<'a> {
     tabs: &'a Vec<TabInfo>,
@@ -295,7 +293,14 @@ impl<'a> MoveCursorAction<'a> {
             return Ok(());
         }
 
-        todo!()
+        if self.candidate_exists(direction)? {
+            move_focus(direction);
+            return Ok(());
+        }
+
+        utils::new_pane(direction);
+
+        Ok(())
     }
 }
 

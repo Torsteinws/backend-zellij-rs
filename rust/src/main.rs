@@ -1,12 +1,11 @@
 mod cli;
 mod fullscreen_state;
 mod move_cursor_action;
-use crate::move_cursor_action::{MoveCursorAction, TabBehavior};
-
-use std::collections::BTreeMap;
-use zellij_tile::prelude::*;
-
+mod utils;
 use crate::cli::MoveBehavior;
+use crate::move_cursor_action::{MoveCursorAction, TabBehavior};
+use std::collections::BTreeMap;
+use zellij_tile::prelude::{actions::Action, *};
 
 #[derive(Default)]
 struct State {
@@ -25,6 +24,7 @@ impl ZellijPlugin for State {
             PermissionType::ReadApplicationState,
             PermissionType::ChangeApplicationState,
             PermissionType::ReadCliPipes,
+            PermissionType::RunActionsAsUser,
         ]);
         subscribe(&[EventType::PermissionRequestResult]);
     }
@@ -34,7 +34,11 @@ impl ZellijPlugin for State {
             Event::PermissionRequestResult(PermissionStatus::Denied) => self.launch_pipe = None,
             Event::PermissionRequestResult(PermissionStatus::Granted) => {
                 // permissions granted, subscribe to events that require them
-                subscribe(&[EventType::TabUpdate, EventType::PaneUpdate]);
+                subscribe(&[
+                    EventType::TabUpdate,
+                    EventType::PaneUpdate,
+                    EventType::ActionComplete,
+                ]);
                 self.permissions_granted = true;
                 self.make_invisible();
                 if let Some(pipe_message) = self.launch_pipe.take() {
@@ -47,6 +51,10 @@ impl ZellijPlugin for State {
             Event::PaneUpdate(pane_manifest) => {
                 self.pane_manifest = pane_manifest;
             }
+            Event::ActionComplete(Action::NewPane { .. }, new_pane_id, context) => {
+                utils::new_pane_callback(new_pane_id, context);
+            }
+
             _ => {}
         }
         false
@@ -67,7 +75,7 @@ impl ZellijPlugin for State {
         };
 
         match parsed_cmd {
-            cli::ParsedCommand::Version => write_to_pipe(pipe_message.source, "0.1.0"),
+            cli::ParsedCommand::Version => utils::write_to_pipe(pipe_message.source, "0.1.0"),
             cli::ParsedCommand::Move(cmd) => {
                 let mover = MoveCursorAction::new(&self.tabs, &self.pane_manifest, &cmd.options);
                 let result = match cmd.command {
@@ -94,12 +102,6 @@ impl ZellijPlugin for State {
     }
 
     fn render(&mut self, _rows: usize, _cols: usize) {}
-}
-
-pub fn write_to_pipe(source: PipeSource, message: &str) {
-    if let PipeSource::Cli(pipe_id) = source {
-        cli_pipe_output(&pipe_id, &format!("{}\n", message));
-    }
 }
 
 impl State {
