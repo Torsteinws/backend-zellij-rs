@@ -41,5 +41,5 @@ impl FromStr for Command {
 #[derive(Error, Debug, Clone, PartialEq, Eq)]
 #[error("Unknown command: {name}")]
 pub struct UnknownCommand {
-    name: String,
+    pub name: String,
 }

@@ -221,6 +221,15 @@ function zellij_plugin.exec(cmd_name, payload, cmd_opts, opts)
     end
 
     local result = vim.system(cmd, opts):wait(400)
+
+    if result.stdout and vim.startswith(result.stdout, 'ERROR:') then
+        error('Encountered error in internal zellij plugin.\n    ' .. tostring(result.stdout))
+    end
+
+    if result.stderr and vim.startswith(result.stderr, 'ERROR:') then
+        error('Encountered error in internal zellij plugin.\n    ' .. tostring(result.stderr))
+    end
+
     return result.stdout or '', result.code, result.stderr or ''
 end
 

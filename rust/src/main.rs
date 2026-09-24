@@ -69,7 +69,7 @@ impl ZellijPlugin for State {
         let parsed_cmd = match cli::parse_input(&pipe_message) {
             Ok(cmd) => cmd,
             Err(err) => {
-                eprintln!("{err}");
+                write_error(pipe_message.source, err);
                 return false;
             }
         };
@@ -93,7 +93,8 @@ impl ZellijPlugin for State {
                     }
                 };
                 if let Err(err) = result {
-                    eprintln!("ERROR: {0}", err)
+                    write_error(pipe_message.source, err);
+                    return false;
                 }
             }
         }
@@ -102,6 +103,11 @@ impl ZellijPlugin for State {
     }
 
     fn render(&mut self, _rows: usize, _cols: usize) {}
+}
+
+fn write_error<E: std::fmt::Display>(source: PipeSource, err: E) {
+    eprintln!("ERROR: {err}");
+    utils::write_to_pipe(source, &format!("ERROR: {err}"));
 }
 
 impl State {
