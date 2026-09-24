@@ -4,6 +4,7 @@ local M = {}
 ---@field move_cursor SmartSplits.ZellijRS.Config.Move
 ---@field fullscreen SmartSplits.ZellijRS.Config.Fullscreen
 ---@field split SmartSplits.ZellijRS.Config.Split
+---@field internal_zellij_plugin SmartSplits.ZellijRS.Config.InternalZellijPlugin
 
 ---@class SmartSplits.ZellijRS.Config.Move
 ---@field pane_or_tab boolean
@@ -18,11 +19,15 @@ local M = {}
 ---@field block_nav boolean
 ---@field state_after_nav 'exit'|'keep'|'native'
 
+---@class SmartSplits.ZellijRS.Config.InternalZellijPlugin
+---@field url? string
+
 -- Same as above, but every field is nullable
 ---@class SmartSplits.ZellijRS.PartialConfig
 ---@field move_cursor? SmartSplits.ZellijRS.PartialConfig.Move
 ---@field fullscreen? SmartSplits.ZellijRS.PartialConfig.Fullscreen
 ---@field split? SmartSplits.ZellijRS.PartialConfig.Split
+---@field internal_zellij_plugin? SmartSplits.ZellijRS.Config.InternalZellijPlugin
 
 ---@class SmartSplits.ZellijRS.PartialConfig.Move
 ---@field pane_or_tab? boolean
@@ -53,6 +58,10 @@ M.defaults = {
     fullscreen = {
         block_nav = false,
         state_after_nav = 'native',
+    },
+
+    internal_zellij_plugin = {
+        url = nil,
     },
 }
 

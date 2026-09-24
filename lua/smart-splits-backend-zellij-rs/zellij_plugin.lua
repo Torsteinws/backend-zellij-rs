@@ -3,9 +3,141 @@ local config = require('smart-splits-backend-zellij-rs.config')
 
 local zellij_plugin = {}
 
+---@param file string
+---@return boolean
+local function file_exists(file)
+    local stat = vim.uv.fs_stat(file)
+    return stat ~= nil and stat.type == 'file'
+end
+
+local function is_windows()
+    return vim.fn.has('win32') == 1
+end
+
+local function is_macos()
+    return vim.fn.has('mac') == 1
+end
+
+--- Tries to resolve the custom url in the user config
+---@return string|nil
+local function find_config_url()
+    local url = vim.trim(config.options.internal_zellij_plugin.url or '')
+    if url == '' then
+        return nil
+    end
+
+    if vim.startswith(url, 'http') then
+        return url
+    end
+
+    local file_path = nil
+    if vim.startswith(url, 'file:') then
+        file_path = string.sub(url, #'file:' + 1)
+    elseif vim.startswith(url, '/') or vim.startswith(url, '~') then
+        file_path = url
+    elseif is_windows() and url:match('^%a:[/\\]') then
+        file_path = url
+    end
+
+    if file_path ~= nil then
+        local file = vim.fs.abspath(file_path)
+        if file_exists(file) then
+            return 'file:' .. file
+        else
+            error("Bad config. File does not exists.\n --> internal_zellij_plugin.url = '" .. url .. "'")
+        end
+    end
+
+    -- If we have come this far, the url is probably an alias.
+    -- Let's allow it and hope for the best.
+    return url
+end
+
+--- Walk through a list of well known directories and see if it can find the plugin file.
+---@return string|nil
+local function guess_url()
+    local filename = 'smart-splits-backend-zellij-rs.wasm'
+
+    local known_dirs = {} ---@type string[]
+
+    local zellij_config_dir = vim.trim(vim.env.ZELLIJ_CONFIG_DIR or '')
+    if zellij_config_dir ~= '' then
+        table.insert(known_dirs, vim.fs.joinpath(zellij_config_dir, 'plugins'))
+        table.insert(known_dirs, vim.fs.joinpath(zellij_config_dir))
+    end
+
+    local xdg_config_home = vim.trim(vim.env.XDG_CONFIG_HOME or '')
+    if xdg_config_home ~= '' then
+        table.insert(known_dirs, vim.fs.joinpath(xdg_config_home, 'zellij/plugins'))
+        table.insert(known_dirs, vim.fs.joinpath(xdg_config_home, 'zellij'))
+    end
+
+    table.insert(known_dirs, '~/.config/zellij/plugins')
+    table.insert(known_dirs, '~/.config/zellij')
+
+    if is_macos() then
+        table.insert(known_dirs, '~/Library/Application Support/org.Zellij-Contributors.Zellij/plugins')
+        table.insert(known_dirs, '~/Library/Application Support/org.Zellij-Contributors.Zellij')
+    end
+
+    if is_windows() then
+        table.insert(known_dirs, '%APPDATA%\\zellij\\plugins\\')
+        table.insert(known_dirs, '%APPDATA%\\zellij\\')
+        table.insert(known_dirs, '%APPDATA%\\Roaming\\zellij\\plugins\\')
+        table.insert(known_dirs, '%APPDATA%\\Roaming\\zellij\\')
+        table.insert(known_dirs, '%LOCALAPPDATA%\\zellij\\plugins\\')
+        table.insert(known_dirs, '%LOCALAPPDATA%\\plugins\\')
+    end
+
+    if not is_windows() then
+        table.insert(known_dirs, '/etc/zellij/plugins')
+        table.insert(known_dirs, '/etc/zellij')
+    end
+
+    for _, dir in ipairs(known_dirs) do
+        local file = vim.fs.abspath(vim.fs.joinpath(dir, filename))
+        if file_exists(file) then
+            return 'file:' .. file
+        end
+    end
+
+    return nil
+end
+
 local function repo_path()
     local current_file = debug.getinfo(1, 'S').source:sub(2)
     return vim.fs.dirname(vim.fs.dirname(vim.fs.dirname(current_file)))
+end
+
+--- Find the url of the local build if it exists.
+---@return string|nil
+local function find_local_build_url()
+    local repo = repo_path()
+
+    local release_build = repo .. '/rust/target/wasm32-wasip1/release/smart-splits-backend-zellij-rs.wasm'
+    local debug_build = repo .. '/rust/target/wasm32-wasip1/debug/smart-splits-backend-zellij-rs.wasm'
+
+    local release_stat = vim.uv.fs_stat(release_build)
+    local debug_stat = vim.uv.fs_stat(debug_build)
+
+    -- If both release and debug build exists, pick whichever was most recently modified.
+    if release_stat and debug_stat then
+        if release_stat.mtime.sec >= debug_stat.mtime.sec then
+            return 'file:' .. release_build
+        else
+            return 'file:' .. debug_build
+        end
+    end
+
+    if release_stat then
+        return 'file:' .. release_build
+    end
+
+    if debug_stat then
+        return 'file:' .. debug_build
+    end
+
+    return nil
 end
 
 ---@type string|nil
@@ -18,32 +150,21 @@ function zellij_plugin.url()
         return _plugin_url
     end
 
-    local repo = repo_path()
-
-    local release_build = repo .. '/rust/target/wasm32-wasip1/release/smart-splits-backend-zellij-rs.wasm'
-    local debug_build = repo .. '/rust/target/wasm32-wasip1/debug/smart-splits-backend-zellij-rs.wasm'
-
-    local release_stat = vim.uv.fs_stat(release_build)
-    local debug_stat = vim.uv.fs_stat(debug_build)
-
-    -- If both release and debug build exists, pick whichever was most recently modified.
-    if release_stat and debug_stat then
-        if release_stat.mtime.sec >= debug_stat.mtime.sec then
-            _plugin_url = 'file:' .. release_build
-            return _plugin_url
-        else
-            _plugin_url = 'file:' .. debug_build
-            return _plugin_url
-        end
-    end
-
-    if release_stat then
-        _plugin_url = 'file:' .. release_build
+    local config_url = find_config_url()
+    if config_url ~= nil then
+        _plugin_url = config_url
         return _plugin_url
     end
 
-    if debug_stat then
-        _plugin_url = 'file:' .. debug_build
+    local local_build_url = find_local_build_url()
+    if local_build_url ~= nil then
+        _plugin_url = local_build_url
+        return _plugin_url
+    end
+
+    local guessed_url = guess_url()
+    if guessed_url ~= nil then
+        _plugin_url = guessed_url
         return _plugin_url
     end
 
@@ -54,7 +175,7 @@ end
 function zellij_plugin.version()
     -- For some reason, zellij will not wait for the rust plugin to write to stdout if payload is empty.
     -- We must therefore include a dummy payload
-    local version = zellij_plugin.exec('version', 'dummy-payload')
+    local version = zellij_plugin.exec('version', 'dummy-payload', { text = true })
     return vim.trim(version)
 end
 
@@ -82,7 +203,12 @@ end
 function zellij_plugin.exec(cmd_name, payload, cmd_opts, opts)
     opts = opts or { text = false }
 
-    local cmd = { zellij.bin_name(), 'action', 'pipe', '--plugin', zellij_plugin.url(), '--name', cmd_name }
+    local plugin_url = zellij_plugin.url()
+    if plugin_url == nil then
+        error('FATAL: Did not find a valid url for the internal zellij plugin.')
+    end
+
+    local cmd = { zellij.bin_name(), 'action', 'pipe', '--plugin', plugin_url, '--name', cmd_name }
 
     cmd_opts = cmd_opts or {}
     if #cmd_opts > 0 then

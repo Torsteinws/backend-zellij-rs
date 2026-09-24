@@ -13,7 +13,10 @@ end
 
 local function activate()
     local zellij_plugin = require('smart-splits-backend-zellij-rs.zellij_plugin')
-    zellij_plugin.start()
+    local ok, result = pcall(zellij_plugin.start)
+    if not ok then
+        vim.notify('FATAL: Failed to start internal zellij plugin.\nReason:' .. tostring(result), vim.log.levels.ERROR)
+    end
 end
 
 ---@type SmartSplitsBackend

@@ -41,6 +41,14 @@ opts = {
                                 -- 'keep': Stay in fullscreen
                                 -- 'native': automatically picks whichever of the two is fastest and causes the least screen flicker.
   },
+
+  -- Config for the internal zellij plugin
+  internal_zellij_plugin = {
+    url = nil,  -- Path to the internal plugin that zellij should load
+                -- Useful if you want to build the plugin from source.
+                -- Follows the zellij plugin url schema: https://zellij.dev/documentation/plugin-loading.html#plugin-url-schema
+                -- If nil, smartly try to find it in the filesystem. If not found, fallback to the included precombiled binary.
+  },
 }
 ```
 

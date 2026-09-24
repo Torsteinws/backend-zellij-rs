@@ -8,6 +8,7 @@ function M.report()
         vim.health.ok('Found ' .. zellij.version())
     else
         vim.health.error('zellij not found on PATH')
+        return
     end
 
     if zellij.is_running() then
@@ -17,15 +18,33 @@ function M.report()
         return
     end
 
-    local plugin_url = zellij_plugin.url()
-
-    if not plugin_url then
-        vim.health.error('Custom zellij plugin not found')
+    local url_ok, plugin_url = pcall(zellij_plugin.url)
+    if not url_ok then
+        local err = tostring(plugin_url)
+        vim.health.error(err)
         return
+    elseif plugin_url == nil then
+        vim.health.error(
+            'Url to custom zellij plugin was not resolved.\n         Consider changing the config: internal_zellij_plugin.url'
+        )
+        return
+    else
+        vim.health.ok(
+            "Url to custom zellij plugin seems to be valid.\n      internal_zellij_plugin.url = '" .. plugin_url .. "'"
+        )
     end
 
-    local plugin_version = zellij_plugin.version()
-    if plugin_version ~= '' then
+    local version_ok, plugin_version = pcall(zellij_plugin.version)
+    if not version_ok then
+        local err = tostring(plugin_version)
+        vim.health.error(
+            'A fatal error occured when trying to communicate with the internal zellij plugin.\nReason: '
+                .. err
+                .. '\n Plugin url: '
+                .. plugin_url
+        )
+        return
+    elseif plugin_version ~= '' then
         vim.health.ok('Custom zellij plugin is loaded and has permissions to run.')
     else
         vim.health.error(
