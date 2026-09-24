@@ -78,4 +78,8 @@ function zellij.move_focus_or_tab(direction)
     end
 end
 
+function zellij.show_floating_panes()
+    zellij.exec({ 'action', 'show-floating-panes' })
+end
+
 return zellij

@@ -6,13 +6,14 @@ use crate::move_cursor_action::{MoveCursorAction, TabBehavior};
 use std::collections::BTreeMap;
 use zellij_tile::prelude::*;
 
-use crate::cli::Command;
+use crate::cli::MoveBehavior;
 
 #[derive(Default)]
 struct State {
     permissions_granted: bool,
     tabs: Vec<TabInfo>,
     pane_manifest: PaneManifest,
+    launch_pipe: Option<PipeMessage>,
 }
 
 register_plugin!(State);
@@ -23,17 +24,22 @@ impl ZellijPlugin for State {
         request_permission(&[
             PermissionType::ReadApplicationState,
             PermissionType::ChangeApplicationState,
+            PermissionType::ReadCliPipes,
         ]);
         subscribe(&[EventType::PermissionRequestResult]);
     }
 
     fn update(&mut self, event: Event) -> bool {
         match event {
-            // ...
+            Event::PermissionRequestResult(PermissionStatus::Denied) => self.launch_pipe = None,
             Event::PermissionRequestResult(PermissionStatus::Granted) => {
                 // permissions granted, subscribe to events that require them
                 subscribe(&[EventType::TabUpdate, EventType::PaneUpdate]);
                 self.permissions_granted = true;
+                self.make_invisible();
+                if let Some(pipe_message) = self.launch_pipe.take() {
+                    self.pipe(pipe_message);
+                }
             }
             Event::TabUpdate(tab_infos) => {
                 self.tabs = tab_infos;
@@ -48,10 +54,11 @@ impl ZellijPlugin for State {
 
     fn pipe(&mut self, pipe_message: PipeMessage) -> bool {
         if !self.permissions_granted {
+            self.launch_pipe = Some(pipe_message);
             return false;
         }
 
-        let cmd = match cli::parse_input(&pipe_message) {
+        let parsed_cmd = match cli::parse_input(&pipe_message) {
             Ok(cmd) => cmd,
             Err(err) => {
                 eprintln!("{err}");
@@ -59,24 +66,71 @@ impl ZellijPlugin for State {
             }
         };
 
-        let mover = MoveCursorAction::new(&self.tabs, &self.pane_manifest, &cmd.options);
-        let result = match cmd.command {
-            Command::MoveFocus => mover.normal_move(cmd.direction, TabBehavior::Stop),
-            Command::MoveFocusOrTab => mover.normal_move(cmd.direction, TabBehavior::Move),
+        match parsed_cmd {
+            cli::ParsedCommand::Version => write_to_pipe(pipe_message.source, "0.1.0"),
+            cli::ParsedCommand::Move(cmd) => {
+                let mover = MoveCursorAction::new(&self.tabs, &self.pane_manifest, &cmd.options);
+                let result = match cmd.command {
+                    MoveBehavior::Normal => mover.normal_move(cmd.direction, TabBehavior::Stop),
+                    MoveBehavior::NormalOrTab => {
+                        mover.normal_move(cmd.direction, TabBehavior::Move)
+                    }
 
-            Command::MoveFocusOrWrap => mover.move_or_wrap(cmd.direction, TabBehavior::Stop),
-            Command::MoveFocusOrTabOrWrap => mover.move_or_wrap(cmd.direction, TabBehavior::Move),
+                    MoveBehavior::Wrap => mover.move_or_wrap(cmd.direction, TabBehavior::Stop),
+                    MoveBehavior::TabOrWrap => mover.move_or_wrap(cmd.direction, TabBehavior::Move),
 
-            Command::MoveFocusOrSplit => mover.move_or_split(cmd.direction, TabBehavior::Stop),
-            Command::MoveFocusOrTabOrSplit => mover.move_or_split(cmd.direction, TabBehavior::Move),
-        };
-
-        if let Err(err) = result {
-            eprint!("ERROR: {0}", err)
+                    MoveBehavior::Split => mover.move_or_split(cmd.direction, TabBehavior::Stop),
+                    MoveBehavior::TabOrSplit => {
+                        mover.move_or_split(cmd.direction, TabBehavior::Move)
+                    }
+                };
+                if let Err(err) = result {
+                    eprintln!("ERROR: {0}", err)
+                }
+            }
         }
 
         false
     }
 
     fn render(&mut self, _rows: usize, _cols: usize) {}
+}
+
+pub fn write_to_pipe(source: PipeSource, message: &str) {
+    if let PipeSource::Cli(pipe_id) = source {
+        cli_pipe_output(&pipe_id, &format!("{}\n", message));
+    }
+}
+
+impl State {
+    fn make_invisible(&self) {
+        // We can not use `hide_self()` or `close_self()`, because that will prevent `PaneUpdate` and
+        // `TabUpdate` events from being triggered.
+        // Workaround: Force pane to have 0 width/height and make it floating.
+
+        let ids = get_plugin_ids();
+        let pane_id = PaneId::Plugin(ids.plugin_id);
+        let Some(pane) = get_pane_info(pane_id) else {
+            return;
+        };
+
+        // Ensure plugin pane is floating
+        if !pane.is_floating {
+            toggle_pane_embed_or_eject_for_pane_id(pane_id);
+        }
+
+        // Hide in top left corner with 0 size
+        let mut coordinates = FloatingPaneCoordinates::default()
+            .with_x_fixed(0)
+            .with_y_fixed(0)
+            .with_width_fixed(0)
+            .with_height_fixed(0);
+        coordinates.pinned = Some(false);
+        coordinates.borderless = Some(true);
+
+        change_floating_panes_coordinates(vec![(pane_id, coordinates)]);
+
+        // Don't allow the pane to receive keyboard focus
+        set_selectable(false);
+    }
 }

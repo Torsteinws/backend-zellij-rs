@@ -13,7 +13,7 @@ end
 
 local function activate()
     local zellij_plugin = require('smart-splits-backend-zellij-rs.zellij_plugin')
-    zellij_plugin.start_or_reload()
+    zellij_plugin.start()
 end
 
 ---@type SmartSplitsBackend

@@ -6,34 +6,47 @@ use zellij_tile::prelude::Direction;
 use zellij_tile::prelude::PipeMessage;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ParsedCommand {
-    pub command: cli::Command,
+pub struct ParsedMoveCommand {
+    pub command: cli::MoveBehavior,
     pub direction: Direction,
     pub options: cli::Options,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ParsedCommand {
+    Move(ParsedMoveCommand),
+    Version,
 }
 
 pub fn parse_input(pipe_message: &PipeMessage) -> Result<ParsedCommand, ParseError> {
     let command: cli::Command = pipe_message.name.parse()?;
 
-    let Some(payload) = pipe_message.payload.as_ref() else {
+    match command {
+        cli::Command::Move(action) => {
+            let direction = parse_move_payload(&pipe_message.payload)?;
+            let options = parse_move_options(&pipe_message.args)?;
+            Ok(ParsedCommand::Move(ParsedMoveCommand {
+                command: action,
+                direction,
+                options,
+            }))
+        }
+        cli::Command::Version => Ok(ParsedCommand::Version),
+    }
+}
+
+fn parse_move_payload(input: &Option<String>) -> Result<Direction, ParseError> {
+    let Some(payload) = input.as_ref() else {
         return Err(ParseError::MissingPayload);
     };
 
-    let direction: Direction = match payload.parse() {
-        Ok(direction) => direction,
-        Err(err) => return Err(ParseError::InvalidPayload(err)),
-    };
-
-    let options = parse_options(&pipe_message.args)?;
-
-    Ok(ParsedCommand {
-        command,
-        direction,
-        options,
-    })
+    match payload.parse::<Direction>() {
+        Ok(direction) => Ok(direction),
+        Err(err) => Err(ParseError::InvalidPayload(err)),
+    }
 }
 
-pub fn parse_options(opts: &BTreeMap<String, String>) -> Result<Options, ParseError> {
+fn parse_move_options(opts: &BTreeMap<String, String>) -> Result<Options, ParseError> {
     let ignore_if_fullscreen = parse_bool_option(
         opts,
         "ignore-if-fullscreen",

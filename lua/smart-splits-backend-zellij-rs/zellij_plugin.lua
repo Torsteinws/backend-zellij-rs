@@ -13,7 +13,7 @@ local _plugin_url = nil
 
 --- Find the name of the plugin
 ---@return string|nil
-local function plugin_url()
+function zellij_plugin.url()
     if _plugin_url ~= nil then
         return _plugin_url
     end
@@ -50,12 +50,25 @@ local function plugin_url()
     return nil
 end
 
-zellij_plugin.is_running = false
+---@return string
+function zellij_plugin.version()
+    -- For some reason, zellij will not wait for the rust plugin to write to stdout if payload is empty.
+    -- We must therefore include a dummy payload
+    local version = zellij_plugin.exec('version', 'dummy-payload')
+    return vim.trim(version)
+end
 
-function zellij_plugin.start_or_reload()
-    local result = vim.system({ 'zellij', 'action', 'start-or-reload-plugin', plugin_url() }):wait(1000)
-    zellij_plugin.is_running = result.code == 0
-    return zellij_plugin.is_running
+function zellij_plugin.start()
+    -- If the plugin is cold started, the first call may return empty.
+    -- This is a known limitation in zellij v0.45.1.
+    zellij_plugin.version()
+    local version = zellij_plugin.version()
+
+    if version == '' then
+        -- The plugin does not have permissions to run.
+        -- Zellij will spawn the permission request form in a floating pane, so lets make sure it is visible.
+        zellij.show_floating_panes()
+    end
 end
 
 --- Execute a command on our custom zellij plugin in /rust
@@ -69,8 +82,7 @@ end
 function zellij_plugin.exec(cmd_name, payload, cmd_opts, opts)
     opts = opts or { text = false }
 
-    print(plugin_url())
-    local cmd = { zellij.bin_name(), 'action', 'pipe', '--plugin', plugin_url(), '--name', cmd_name }
+    local cmd = { zellij.bin_name(), 'action', 'pipe', '--plugin', zellij_plugin.url(), '--name', cmd_name }
 
     cmd_opts = cmd_opts or {}
     if #cmd_opts > 0 then
@@ -82,7 +94,7 @@ function zellij_plugin.exec(cmd_name, payload, cmd_opts, opts)
         vim.list_extend(cmd, { '--', payload })
     end
 
-    local result = vim.system(cmd, opts):wait(1000)
+    local result = vim.system(cmd, opts):wait(400)
     return result.stdout or '', result.code, result.stderr or ''
 end
 
