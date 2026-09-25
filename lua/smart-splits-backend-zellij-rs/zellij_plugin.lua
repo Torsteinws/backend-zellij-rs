@@ -222,15 +222,26 @@ function zellij_plugin.exec(cmd_name, payload, cmd_opts, opts)
 
     local result = vim.system(cmd, opts):wait(400)
 
-    if result.stdout and vim.startswith(result.stdout, 'ERROR:') then
-        error('Encountered error in internal zellij plugin.\n    ' .. tostring(result.stdout))
+    local stdout = vim.trim(result.stdout or '')
+    local stderr = vim.trim(result.stderr or '')
+
+    if vim.startswith(stdout, 'ERROR:') then
+        error('Encountered error in internal zellij plugin.\n    ' .. stdout)
     end
 
-    if result.stderr and vim.startswith(result.stderr, 'ERROR:') then
-        error('Encountered error in internal zellij plugin.\n    ' .. tostring(result.stderr))
+    if vim.startswith(stdout, 'PANIC!') then
+        -- Plugin panicked. It's now in a broken state and needs to be restarted.
+        vim.system({ zellij.bin_name(), 'action', 'start-or-reload-plugin', plugin_url }):wait(1000)
+
+        local panic_message = vim.trim(stdout:sub(#'PANIC!' + 1))
+        if panic_message ~= '' then
+            error('Panic in internal zellij plugin.\nReason: ' .. panic_message)
+        else
+            error('Panic in internal zellij plugin.')
+        end
     end
 
-    return result.stdout or '', result.code, result.stderr or ''
+    return stdout, result.code, stderr
 end
 
 ---@type string[]|nil

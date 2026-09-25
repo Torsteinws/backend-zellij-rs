@@ -66,16 +66,43 @@ impl ZellijPlugin for State {
             return false;
         }
 
-        let parsed_cmd = match cli::parse_input(&pipe_message) {
+        // Set up a panic handler. The handler will not try to recover, it will only notify the caller that the plugin has panicked.
+        if let PipeSource::Cli(pipe_id) = pipe_message.source.clone() {
+            // Hold the CLI command open so that we can print to stdout if the plugin panics.
+            block_cli_pipe_input(&pipe_id);
+            std::panic::set_hook(Box::new(move |info| {
+                let message = info.payload_as_str().unwrap_or("");
+                cli_pipe_output(&pipe_id, &format!("PANIC! {message}\n"));
+                unblock_cli_pipe_input(&pipe_id);
+                report_panic(info);
+            }));
+        }
+
+        // Main program
+        self.handle_commmand(&pipe_message);
+
+        if let PipeSource::Cli(pipe_id) = &pipe_message.source {
+            unblock_cli_pipe_input(pipe_id);
+        }
+
+        false
+    }
+
+    fn render(&mut self, _rows: usize, _cols: usize) {}
+}
+
+impl State {
+    pub fn handle_commmand(&mut self, pipe_message: &PipeMessage) {
+        let parsed_cmd = match cli::parse_input(pipe_message) {
             Ok(cmd) => cmd,
             Err(err) => {
-                write_error(pipe_message.source, err);
-                return false;
+                write_error(&pipe_message.source, err);
+                return;
             }
         };
 
         match parsed_cmd {
-            cli::ParsedCommand::Version => utils::write_to_pipe(pipe_message.source, "0.1.0"),
+            cli::ParsedCommand::Version => utils::write_to_pipe(&pipe_message.source, "0.1.0"),
             cli::ParsedCommand::Move(cmd) => {
                 let mover = MoveCursorAction::new(&self.tabs, &self.pane_manifest, &cmd.options);
                 let result = match cmd.command {
@@ -93,19 +120,14 @@ impl ZellijPlugin for State {
                     }
                 };
                 if let Err(err) = result {
-                    write_error(pipe_message.source, err);
-                    return false;
+                    write_error(&pipe_message.source, err);
                 }
             }
         }
-
-        false
     }
-
-    fn render(&mut self, _rows: usize, _cols: usize) {}
 }
 
-fn write_error<E: std::fmt::Display>(source: PipeSource, err: E) {
+fn write_error<E: std::fmt::Display>(source: &PipeSource, err: E) {
     eprintln!("ERROR: {err}");
     utils::write_to_pipe(source, &format!("ERROR: {err}"));
 }

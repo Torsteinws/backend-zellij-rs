@@ -1,9 +1,9 @@
 use std::collections::BTreeMap;
 use zellij_tile::prelude::{actions::Action, *};
 
-pub fn write_to_pipe(source: PipeSource, message: &str) {
+pub fn write_to_pipe(source: &PipeSource, message: &str) {
     if let PipeSource::Cli(pipe_id) = source {
-        cli_pipe_output(&pipe_id, &format!("{}\n", message));
+        cli_pipe_output(pipe_id, &format!("{}\n", message));
     }
 }
 
