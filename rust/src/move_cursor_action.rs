@@ -110,22 +110,58 @@ impl<'a> MoveCursorAction<'a> {
     }
 
     fn set_fullscreen_state(&self, next_state: FullscreenState) -> Result<(), MoveCursorError> {
-        let tab = self.current_tab()?;
-        let pane = self.current_pane()?;
-        let current_state = get_fullscreen_state(pane, tab);
+        let current_state = self.get_fullscreen_state()?;
         set_fullscreen_state(current_state, next_state);
         Ok(())
     }
 
-    fn get_current_cursor(&self) -> Result<Point, MoveCursorError> {
+    fn get_fullscreen_state(&self) -> Result<FullscreenState, MoveCursorError> {
+        let tab = self.current_tab()?;
         let pane = self.current_pane()?;
-        let (cursor_x, cursor_y) = match pane.cursor_coordinates_in_pane {
-            Some(cursor) => (cursor.0 as isize, cursor.1 as isize),
-            None => (pane.pane_columns as isize / 2, pane.pane_rows as isize / 2), // Fall back to middle of the pane
-        };
-        Ok(Point {
-            x: pane.pane_x as isize + cursor_x,
-            y: pane.pane_y as isize + cursor_y,
+        Ok(get_fullscreen_state(pane, tab))
+    }
+
+    fn move_focus(&self, direction: Direction) -> Result<(), MoveCursorError> {
+        move_focus(direction);
+        if self.options.fullscreen == options::FullscreenBehavior::Exit {
+            self.set_fullscreen_state(FullscreenState::Normal)?;
+        }
+        Ok(())
+    }
+
+    fn move_focus_or_tab(&self, direction: Direction) -> Result<(), MoveCursorError> {
+        move_focus_or_tab(direction);
+        if self.options.fullscreen == options::FullscreenBehavior::Exit {
+            self.set_fullscreen_state(FullscreenState::Normal)?;
+        }
+        Ok(())
+    }
+
+    fn focus_terminal_pane(&self, pane_id: u32) -> Result<(), MoveCursorError> {
+        let initial_fullscreen_state = self.get_fullscreen_state()?;
+
+        focus_terminal_pane(pane_id, false, false);
+
+        if self.options.fullscreen == options::FullscreenBehavior::Keep {
+            set_fullscreen_state(FullscreenState::Normal, initial_fullscreen_state);
+        }
+
+        Ok(())
+    }
+
+    fn get_current_cursor(&self) -> Option<Point> {
+        match self.current_pane() {
+            Ok(pane) => Self::get_cursor(pane),
+            _ => None,
+        }
+    }
+
+    fn get_cursor(pane: &PaneInfo) -> Option<Point> {
+        pane.cursor_coordinates_in_pane.map(|cursor| {
+            Point::new(
+                (pane.pane_x + cursor.0) as isize,
+                (pane.pane_y + cursor.1) as isize,
+            )
         })
     }
 
@@ -148,14 +184,11 @@ impl<'a> MoveCursorAction<'a> {
         }
 
         if tab_behavior == TabBehavior::Move && direction.is_horizontal() {
-            move_focus_or_tab(direction)
+            self.move_focus_or_tab(direction)?;
         } else {
-            move_focus(direction)
+            self.move_focus(direction)?;
         }
 
-        if self.options.fullscreen == options::FullscreenBehavior::Exit {
-            self.set_fullscreen_state(FullscreenState::Normal)?;
-        }
         Ok(())
     }
 
@@ -169,8 +202,7 @@ impl<'a> MoveCursorAction<'a> {
         }
 
         if tab_behavior == TabBehavior::Move && self.tabs.len() > 1 {
-            move_focus_or_tab(direction);
-            return Ok(());
+            return self.move_focus_or_tab(direction);
         }
 
         let candidates = self.pane_candidates()?;
@@ -179,16 +211,17 @@ impl<'a> MoveCursorAction<'a> {
         }
 
         if self.candidate_exists(direction)? {
-            move_focus(direction);
-            return Ok(());
+            return self.move_focus(direction);
         }
+
+        let current_pane_geometry = self.get_current_pane_geometry()?;
 
         // Find all panes that borders the diametrical opposing edge,
         // and aligns with the current pane.
         let opposing_panes = {
             let mut result: Vec<&PaneInfo> = Vec::new();
             let mut largest_delta = 0;
-            let origin = self.get_current_pane_geometry()?;
+            let origin = &current_pane_geometry;
 
             let wrap_direction = direction.invert();
 
@@ -197,8 +230,8 @@ impl<'a> MoveCursorAction<'a> {
 
                 // Target must align with the current pane to be valid.
                 let is_aligned = match wrap_direction {
-                    Direction::Left | Direction::Right => target.rows_overlap(&origin), // Moving horizontally, target must have overlaping rows
-                    Direction::Up | Direction::Down => target.cols_overlap(&origin), // Moving vertically, target must have overlapping columns
+                    Direction::Left | Direction::Right => target.rows_overlap(origin), // Moving horizontally, target must have overlaping rows
+                    Direction::Up | Direction::Down => target.cols_overlap(origin), // Moving vertically, target must have overlapping columns
                 };
                 if !is_aligned {
                     continue;
@@ -226,30 +259,45 @@ impl<'a> MoveCursorAction<'a> {
             return Ok(());
         }
 
-        // We have all panes on the oppsoing edge.
-        // Let's pick the pane that matches the current cursor location.
-        let cursor = self.get_current_cursor()?;
-        for pane in &opposing_panes {
-            let target = Rect::from_pane(pane);
+        let wrap_target = {
+            let mut result: Option<&PaneInfo> = None;
 
-            let is_aligned = match direction {
-                Direction::Left | Direction::Right => {
-                    target.y <= cursor.y && cursor.y < target.bottom()
-                }
-                Direction::Up | Direction::Down => {
-                    target.x <= cursor.x && cursor.x < target.right()
-                }
+            let origin = match self.current_pane()?.is_fullscreen {
+                true => current_pane_geometry.center(),
+                false => match self.get_current_cursor() {
+                    Some(cursor) => cursor,
+                    None => current_pane_geometry.center(),
+                },
             };
 
-            if is_aligned {
-                focus_terminal_pane(pane.id, false, false);
-                return Ok(());
-            }
-        }
+            for pane in &opposing_panes {
+                let target = Rect::from_pane(pane);
 
-        Err(MoveCursorError::ReachedUnreachableCodePath(
-            "Failed to pick a wrap target out of multiple valid panes.",
-        ))
+                let is_aligned = match direction {
+                    Direction::Left | Direction::Right => {
+                        target.y <= origin.y && origin.y < target.bottom()
+                    }
+                    Direction::Up | Direction::Down => {
+                        target.x <= origin.x && origin.x < target.right()
+                    }
+                };
+
+                if is_aligned {
+                    result = Some(pane);
+                    break;
+                }
+            }
+
+            result
+        };
+
+        let Some(target) = wrap_target else {
+            return Err(MoveCursorError::ReachedUnreachableCodePath(
+                "Failed to pick a wrap target out of multiple valid panes.",
+            ));
+        };
+
+        self.focus_terminal_pane(target.id)
     }
 
     fn candidate_exists(&self, direction: Direction) -> Result<bool, MoveCursorError> {
@@ -278,7 +326,6 @@ impl<'a> MoveCursorAction<'a> {
         Ok(false)
     }
 
-    // #[expect(unused)]
     pub fn move_or_split(
         &self,
         direction: Direction,
@@ -289,13 +336,11 @@ impl<'a> MoveCursorAction<'a> {
         }
 
         if tab_behavior == TabBehavior::Move && self.tabs.len() > 1 {
-            move_focus_or_tab(direction);
-            return Ok(());
+            return self.move_focus_or_tab(direction);
         }
 
         if self.candidate_exists(direction)? {
-            move_focus(direction);
-            return Ok(());
+            return self.move_focus(direction);
         }
 
         utils::new_pane(direction);
