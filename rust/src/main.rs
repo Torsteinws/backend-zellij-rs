@@ -1,5 +1,4 @@
 mod cli;
-mod fullscreen_state;
 mod move_cursor_action;
 mod utils;
 use crate::cli::MoveBehavior;

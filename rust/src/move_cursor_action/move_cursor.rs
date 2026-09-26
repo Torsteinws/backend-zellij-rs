@@ -1,9 +1,9 @@
 use crate::cli::options;
 use crate::cli::Options;
-use crate::fullscreen_state::*;
+use crate::move_cursor_action::fullscreen_state::*;
+use crate::move_cursor_action::geometry::*;
 use crate::utils;
 use std::cell::OnceCell;
-use std::collections::HashSet;
 use thiserror::Error;
 use zellij_tile::prelude::*;
 
@@ -105,7 +105,7 @@ impl<'a> MoveCursorAction<'a> {
         Ok(candidates)
     }
 
-    pub fn is_blocked_by_fullscreen(&self) -> Result<bool, MoveCursorError> {
+    fn is_blocked_by_fullscreen(&self) -> Result<bool, MoveCursorError> {
         if self.options.ignore_if_fullscreen {
             let tab = self.current_tab()?;
             return Ok(tab.is_fullscreen_active);
@@ -178,59 +178,6 @@ impl<'a> MoveCursorAction<'a> {
         })
     }
 
-    fn get_current_pane_geometry(&self) -> Result<Rect, MoveCursorError> {
-        let pane = self.current_pane()?;
-        let screen = self.get_fullscreen_state()?;
-        if matches!(screen, FullscreenState::Normal) {
-            return Ok(Rect::from_pane(pane));
-        }
-
-        let candidates = self.pane_candidates()?;
-        if candidates.is_empty() {
-            return Ok(Rect::from_pane(pane));
-        }
-        let candidate_rects: Vec<Rect> = candidates.iter().map(|p| Rect::from_pane(p)).collect();
-
-        if matches!(screen, FullscreenState::Fullscreen) {
-            let perimeter = Rect::from_pane(pane);
-            let rect = find_missing_rect(perimeter, &candidate_rects);
-            return rect.ok_or(MoveCursorError::CurrentPaneGeometryNotFound);
-        }
-
-        // If we reach this point we are in no-ui-fullscreen.
-        // What makes this more complex is that we don't know the perimeter of the layout.
-        // We know the size of the perimeter, but not where it starts. Since there are probably not
-        // that many valid combinations it should be fine to try all possible start coordinates.
-
-        let tab = self.current_tab()?;
-
-        let perimeter_cols = tab.viewport_columns as isize;
-        let perimeter_rows = tab.viewport_rows as isize;
-
-        let max_x0 = tab.display_area_columns as isize - perimeter_cols;
-        let max_y0 = tab.display_area_rows as isize - perimeter_rows;
-
-        let mut perimeters: Vec<Rect> = vec![];
-        for x in 0..=max_x0 {
-            for y in 0..=max_y0 {
-                perimeters.push(Rect {
-                    x,
-                    y,
-                    cols: perimeter_cols,
-                    rows: perimeter_rows,
-                });
-            }
-        }
-
-        for perimeter in perimeters {
-            if let Some(rect) = find_missing_rect(perimeter, &candidate_rects) {
-                return Ok(rect);
-            }
-        }
-
-        Err(MoveCursorError::CurrentPaneGeometryNotFound)
-    }
-
     pub fn normal_move(
         &self,
         direction: Direction,
@@ -245,6 +192,28 @@ impl<'a> MoveCursorAction<'a> {
         } else {
             self.move_focus(direction)?;
         }
+
+        Ok(())
+    }
+
+    pub fn move_or_split(
+        &self,
+        direction: Direction,
+        tab_behavior: TabBehavior,
+    ) -> Result<(), MoveCursorError> {
+        if self.is_blocked_by_fullscreen()? {
+            return Ok(());
+        }
+
+        if tab_behavior == TabBehavior::Move && self.tabs.len() > 1 {
+            return self.move_focus_or_tab(direction);
+        }
+
+        if self.candidate_exists(direction)? {
+            return self.move_focus(direction);
+        }
+
+        utils::new_pane(direction);
 
         Ok(())
     }
@@ -383,173 +352,62 @@ impl<'a> MoveCursorAction<'a> {
         Ok(false)
     }
 
-    pub fn move_or_split(
-        &self,
-        direction: Direction,
-        tab_behavior: TabBehavior,
-    ) -> Result<(), MoveCursorError> {
-        if self.is_blocked_by_fullscreen()? {
-            return Ok(());
+    fn get_current_pane_geometry(&self) -> Result<Rect, MoveCursorError> {
+        let pane = self.current_pane()?;
+        let screen = self.get_fullscreen_state()?;
+        if matches!(screen, FullscreenState::Normal) {
+            return Ok(Rect::from_pane(pane));
         }
 
-        if tab_behavior == TabBehavior::Move && self.tabs.len() > 1 {
-            return self.move_focus_or_tab(direction);
+        let candidates = self.pane_candidates()?;
+        if candidates.is_empty() {
+            return Ok(Rect::from_pane(pane));
+        }
+        let candidate_rects: Vec<Rect> = candidates.iter().map(|p| Rect::from_pane(p)).collect();
+
+        if matches!(screen, FullscreenState::Fullscreen) {
+            let perimeter = Rect::from_pane(pane);
+            let rect = find_missing_rect(perimeter, &candidate_rects);
+            return rect.ok_or(MoveCursorError::CurrentPaneGeometryNotFound);
         }
 
-        if self.candidate_exists(direction)? {
-            return self.move_focus(direction);
-        }
+        // If we reach this point we are in no-ui-fullscreen.
+        // What makes this more complex is that we don't know the perimeter of the layout.
+        // We know the size of the perimeter, but not where it starts. Since there are probably not
+        // that many valid combinations it should be fine to try all possible start coordinates.
 
-        utils::new_pane(direction);
+        let tab = self.current_tab()?;
 
-        Ok(())
-    }
-}
+        let perimeter_cols = tab.viewport_columns as isize;
+        let perimeter_rows = tab.viewport_rows as isize;
 
-/// If exactly one rectangle is missing from a grid of rectangles, find the coordinates and size of
-/// the missing rectangle.
-fn find_missing_rect(perimeter: Rect, existing_rects: &[Rect]) -> Option<Rect> {
-    let mut corners: HashSet<Point> = HashSet::new();
+        let max_x0 = tab.display_area_columns as isize - perimeter_cols;
+        let max_y0 = tab.display_area_rows as isize - perimeter_rows;
 
-    for corner in perimeter.corners() {
-        corners.insert(corner);
-    }
-
-    for rect in existing_rects {
-        for corner in rect.corners() {
-            if corners.contains(&corner) {
-                corners.remove(&corner);
-            } else {
-                corners.insert(corner);
+        let mut perimeters: Vec<Rect> = vec![];
+        for x in 0..=max_x0 {
+            for y in 0..=max_y0 {
+                perimeters.push(Rect {
+                    x,
+                    y,
+                    cols: perimeter_cols,
+                    rows: perimeter_rows,
+                });
             }
         }
+
+        for perimeter in perimeters {
+            if let Some(rect) = find_missing_rect(perimeter, &candidate_rects) {
+                return Ok(rect);
+            }
+        }
+
+        Err(MoveCursorError::CurrentPaneGeometryNotFound)
     }
-
-    if corners.len() != 4 {
-        return None;
-    }
-
-    let corners_x: HashSet<isize> = corners.iter().map(|p| p.x).collect();
-    let corners_y: HashSet<isize> = corners.iter().map(|p| p.y).collect();
-    if corners_x.len() != 2 || corners_y.len() != 2 {
-        return None;
-    }
-
-    let x0 = *corners_x.iter().min().unwrap();
-    let x1 = *corners_x.iter().max().unwrap();
-    let y0 = *corners_y.iter().min().unwrap();
-    let y1 = *corners_y.iter().max().unwrap();
-
-    let rect = Rect {
-        x: x0,
-        y: y0,
-        cols: x1 - x0,
-        rows: y1 - y0,
-    };
-
-    // Validate that the 4 points form a rectangle
-    let expected: HashSet<Point> = rect.corners().iter().copied().collect();
-    if expected != corners {
-        return None;
-    }
-
-    Some(rect)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TabBehavior {
     Stop,
     Move,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-struct Rect {
-    x: isize,
-    y: isize,
-    cols: isize,
-    rows: isize,
-}
-
-impl Rect {
-    pub fn from_pane(pane: &PaneInfo) -> Rect {
-        Rect {
-            x: pane.pane_x as isize,
-            y: pane.pane_y as isize,
-            cols: pane.pane_columns as isize,
-            rows: pane.pane_rows as isize,
-        }
-    }
-
-    fn corners(&self) -> [Point; 4] {
-        [
-            self.top_left(),
-            self.top_right(),
-            self.bottom_left(),
-            self.bottom_right(),
-        ]
-    }
-
-    pub fn right(&self) -> isize {
-        self.x + self.cols
-    }
-
-    pub fn bottom(&self) -> isize {
-        self.y + self.rows
-    }
-
-    pub fn center(&self) -> Point {
-        Point::new(self.x + (self.cols / 2), self.y + (self.rows) / 2)
-    }
-
-    pub fn top_left(&self) -> Point {
-        Point::new(self.x, self.y)
-    }
-
-    pub fn top_right(&self) -> Point {
-        Point::new(self.right(), self.y)
-    }
-
-    pub fn bottom_left(&self) -> Point {
-        Point::new(self.x, self.bottom())
-    }
-
-    pub fn bottom_right(&self) -> Point {
-        Point::new(self.right(), self.bottom())
-    }
-
-    pub fn is_left_of(&self, rect: &Rect) -> bool {
-        self.x < rect.x
-    }
-
-    pub fn is_right_of(&self, rect: &Rect) -> bool {
-        self.x > rect.x
-    }
-
-    pub fn is_under(&self, rect: &Rect) -> bool {
-        self.y > rect.y
-    }
-
-    pub fn is_above(&self, rect: &Rect) -> bool {
-        self.y < rect.y
-    }
-
-    pub fn cols_overlap(&self, rect: &Rect) -> bool {
-        self.x < rect.right() && rect.x < self.right()
-    }
-
-    pub fn rows_overlap(&self, rect: &Rect) -> bool {
-        self.y < rect.bottom() && rect.y < self.bottom()
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-struct Point {
-    x: isize,
-    y: isize,
-}
-
-impl Point {
-    pub fn new(x: isize, y: isize) -> Point {
-        Point { x, y }
-    }
 }
