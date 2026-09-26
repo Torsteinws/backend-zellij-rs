@@ -171,25 +171,65 @@ function zellij_plugin.url()
     return nil
 end
 
----@return string
-function zellij_plugin.version()
-    -- For some reason, zellij will not wait for the rust plugin to write to stdout if payload is empty.
-    -- We must therefore include a dummy payload
-    local version = zellij_plugin.exec('version', 'dummy-payload', { text = true })
-    return vim.trim(version)
+--- Execute a command on our custom zellij plugin in /rust
+---@param cmd_name string The name of the command in the plugin
+---@param payload? string The argument for the command
+---@param cmd_opts? string[]
+---@param opts? vim.SystemOpts
+---@return vim.SystemObj
+local function simple_exec(cmd_name, payload, cmd_opts, opts)
+    local plugin_url = zellij_plugin.url()
+    if plugin_url == nil then
+        error('FATAL: Did not find a valid url for the internal zellij plugin.')
+    end
+
+    local cmd = { zellij.bin_name(), 'action', 'pipe', '--plugin', plugin_url, '--name', cmd_name }
+
+    cmd_opts = cmd_opts or {}
+    if #cmd_opts > 0 then
+        local cmd_opts_str = table.concat(cmd_opts, ',')
+        vim.list_extend(cmd, { '--args', cmd_opts_str })
+    end
+
+    if payload ~= nil then
+        vim.list_extend(cmd, { '--', payload })
+    end
+
+    return vim.system(cmd, opts)
 end
 
 function zellij_plugin.start()
-    -- If the plugin is cold started, the first call may return empty.
-    -- This is a known limitation in zellij v0.45.1.
-    zellij_plugin.version()
-    local version = zellij_plugin.version()
+    -- The following line looks uselesse, but it is very important:
+    --
+    -- 1. It launches and warms up the plugin.
+    --    Warmup is important because the first call may not write to stdout.
+    --    This is a known limitation in zellij v0.45.1
+    --
+    -- 2. It ensures the plugin will be rendered in a floating pane.
+    --    This is nice when the plugin asks the user for permission to run.
+    --
+    simple_exec('version', nil, nil, { timeout = 50 })
+
+    -- For some reason, zellij will not wait for the rust plugin to write to stdout if payload is empty.
+    -- We must therefore include a dummy payload
+    local result = simple_exec('version', 'dummy-palyod', nil, { text = true }):wait(250)
+    local version = vim.trim(tostring(result.stdout))
+
+    -- Force a clean slate by restarting the plugin.
+    --
+    -- Why not start with this you ask?
+    -- Because that would render the plugin as an embeded pane.
+    -- We want the pane to be floating, so therefore we must do the steps above first.
+    --
+    zellij_plugin.start_or_reload()
 
     if version == '' then
-        -- The plugin does not have permissions to run.
-        -- Zellij will spawn the permission request form in a floating pane, so lets make sure it is visible.
+        -- Plugin asks the user to grant it permission to run. Make sure permissions form is visible.
         zellij.show_floating_panes()
     end
+
+    -- Warm up the restarted plugin.
+    simple_exec('version')
 end
 
 --- Execute a command on our custom zellij plugin in /rust
@@ -231,7 +271,7 @@ function zellij_plugin.exec(cmd_name, payload, cmd_opts, opts)
 
     if vim.startswith(stdout, 'PANIC!') then
         -- Plugin panicked. It's now in a broken state and needs to be restarted.
-        vim.system({ zellij.bin_name(), 'action', 'start-or-reload-plugin', plugin_url }):wait(1000)
+        zellij_plugin.start_or_reload()
 
         local panic_message = vim.trim(stdout:sub(#'PANIC!' + 1))
         if panic_message ~= '' then
@@ -242,6 +282,22 @@ function zellij_plugin.exec(cmd_name, payload, cmd_opts, opts)
     end
 
     return stdout, result.code, stderr
+end
+
+---@return vim.SystemObj
+function zellij_plugin.start_or_reload()
+    return vim.system({ zellij.bin_name(), 'action', 'start-or-reload-plugin', zellij_plugin.url() })
+end
+
+---@param opts? vim.SystemOpts
+---@return string
+function zellij_plugin.version(opts)
+    local options = vim.tbl_deep_extend('force', { text = true }, opts or {})
+
+    -- For some reason, zellij will not wait for the rust plugin to write to stdout if payload is empty.
+    -- We must therefore include a dummy payload
+    local version = zellij_plugin.exec('version', 'dummy-payload', options)
+    return vim.trim(version)
 end
 
 ---@type string[]|nil
