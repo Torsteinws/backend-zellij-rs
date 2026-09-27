@@ -1,9 +1,17 @@
 [package]
 name = "smart-splits-backend-zellij-rs"
 version = "0.1.0"
-authors = ["Torstein Wilhelmsen Sandvik git@torsteinws.no"]
-edition = "2018"
+edition = "2024"
+license = "GPL-3.0-or-later"
+repository = "https://github.com/smart-splits-nvim/backend-zellij-rs"
 
 [dependencies]
 thiserror = "2.0.20"
 zellij-tile = "0.45.1"
+
+[lints.clippy]
+# use #[expect(...)]` instead of allow, this makes it so you get a compiler error
+# if the lint is no longer triggered
+allow_attributes = "deny"
+# enable a bunch more linting rules
+pedantic = { level = "deny", priority = -1 }
