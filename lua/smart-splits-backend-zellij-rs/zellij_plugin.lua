@@ -357,7 +357,7 @@ function zellij_plugin.move_focus_or_wrap(direction)
 end
 
 ---@param direction SmartSplitsDirection
-function zellij_plugin.move_focus_or_tab_wrap(direction)
+function zellij_plugin.move_focus_or_or_tab_wrap(direction)
     local _, code = zellij_plugin.exec('move-focus-or-tab-or-wrap', direction, default_options())
     return code == 0
 end

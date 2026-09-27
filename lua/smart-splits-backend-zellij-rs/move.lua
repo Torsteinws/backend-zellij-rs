@@ -61,7 +61,7 @@ end
 ---@return boolean
 local function handle_wrap(direction)
     if config.options.move_cursor.pane_or_tab == true then
-        return zellij_plugin.move_focus_or_tab_wrap(direction)
+        return zellij_plugin.move_focus_or_or_tab_wrap(direction)
     else
         return zellij_plugin.move_focus_or_wrap(direction)
     end
