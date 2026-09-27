@@ -24,7 +24,7 @@ function zellij_plugin.online_url()
     if backend_version == '' then
         utils.error('Failed to find current version of backend-zellij-rs')
     end
-    return 'https://github.com/smart-splits-nvim/backend-zellij-rs/releases/latest/download/'
+    return 'https://github.com/smart-splits-nvim/backend-zellij-rs/releases/download/v'
         .. backend_version
         .. '/smart-splits-backend-zellij-rs.wasm'
 end
