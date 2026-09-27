@@ -87,7 +87,7 @@ end
 function M.try_move(direction, opts)
     local ok, result = pcall(handle_move, direction, opts)
     if not ok then
-        vim.notify(tostring(result), vim.log.levels.ERROR)
+        vim.notify('\n' .. tostring(result), vim.log.levels.ERROR)
         return false
     end
     last_move_time = vim.uv.now()

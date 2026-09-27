@@ -6,6 +6,8 @@ use crate::move_cursor_action::{MoveCursorAction, TabBehavior};
 use std::collections::BTreeMap;
 use zellij_tile::prelude::{actions::Action, *};
 
+const VERSION: &str = env!("VERSION");
+
 #[derive(Default)]
 struct State {
     permissions_granted: bool,
@@ -101,7 +103,7 @@ impl State {
         };
 
         match parsed_cmd {
-            cli::ParsedCommand::Version => utils::write_to_pipe(&pipe_message.source, "0.1.0"),
+            cli::ParsedCommand::Version => utils::write_to_pipe(&pipe_message.source, VERSION),
             cli::ParsedCommand::Move(cmd) => {
                 let mover = MoveCursorAction::new(&self.tabs, &self.pane_manifest, &cmd.options);
                 let result = match cmd.command {

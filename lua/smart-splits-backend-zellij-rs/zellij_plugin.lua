@@ -1,5 +1,6 @@
 local zellij = require('smart-splits-backend-zellij-rs.zellij')
 local config = require('smart-splits-backend-zellij-rs.config')
+local utils = require('smart-splits-backend-zellij-rs.utils')
 
 local zellij_plugin = {}
 
@@ -104,15 +105,10 @@ local function guess_url()
     return nil
 end
 
-local function repo_path()
-    local current_file = debug.getinfo(1, 'S').source:sub(2)
-    return vim.fs.dirname(vim.fs.dirname(vim.fs.dirname(current_file)))
-end
-
 --- Find the url of the local build if it exists.
 ---@return string|nil
 local function find_local_build_url()
-    local repo = repo_path()
+    local repo = utils.repo_path()
 
     local release_build = repo .. '/rust/target/wasm32-wasip1/release/smart-splits-backend-zellij-rs.wasm'
     local debug_build = repo .. '/rust/target/wasm32-wasip1/debug/smart-splits-backend-zellij-rs.wasm'
@@ -199,37 +195,48 @@ local function simple_exec(cmd_name, payload, cmd_opts, opts)
 end
 
 function zellij_plugin.start()
-    -- The following line looks uselesse, but it is very important:
-    --
-    -- 1. It launches and warms up the plugin.
-    --    Warmup is important because the first call may not write to stdout.
-    --    This is a known limitation in zellij v0.45.1
-    --
-    -- 2. It ensures the plugin will be rendered in a floating pane.
-    --    This is nice when the plugin asks the user for permission to run.
-    --
+    -- NOTE: This function may look messy, but it has intentionally been written like this to avoid a bunch of edge cases
+    --       I'd advise against trying to refactor it before you understand all the edge cases it works around.
+
+    -- Launch the plugin if it is not already running.
+    -- Launching it like this will ensure it is rendered as as floating.
+    -- This is nice if the plugin needs to ask the user for permission to run.
     simple_exec('version', nil, nil, { timeout = 50 })
+    simple_exec('version', 'dummy-palyod', nil, { text = true }):wait(300)
 
-    -- For some reason, zellij will not wait for the rust plugin to write to stdout if payload is empty.
-    -- We must therefore include a dummy payload
-    local result = simple_exec('version', 'dummy-palyod', nil, { text = true }):wait(250)
+    -- Now that the plugin is floating, let's restart it to force a clean slate.
+    -- This improves stabiliy for end user. It prevents the plugin from ever being in a broken state when nvim launches.
+    zellij_plugin.start_or_reload():wait(300)
+
+    -- Warm up the plugin.
+    -- We need to do this because the first call may not write to stdout.
+    -- This is a known limitation in zellij v0.45.1
+    simple_exec('version', nil, nil, { timeout = 100 })
+
+    -- For some reason, we need to add a dummy paylod. Zellij may decide to not wait for the rust plugin to write to stdout if payload is empty.
+    local result = simple_exec('version', 'dummy-palyod', nil, { text = true }):wait(300)
     local version = vim.trim(tostring(result.stdout))
+    local is_fully_loaded = version ~= ''
 
-    -- Force a clean slate by restarting the plugin.
-    --
-    -- Why not start with this you ask?
-    -- Because that would render the plugin as an embeded pane.
-    -- We want the pane to be floating, so therefore we must do the steps above first.
-    --
-    zellij_plugin.start_or_reload()
-
-    if version == '' then
+    if not is_fully_loaded then
         -- Plugin asks the user to grant it permission to run. Make sure permissions form is visible.
         zellij.show_floating_panes()
+        return
     end
 
-    -- Warm up the restarted plugin.
-    simple_exec('version')
+    local backend_version = tostring(utils.backend_version())
+    if version ~= backend_version then
+        local msg = string.format(
+            [[
+Version mismatch: 
+    - Smart splits backend version: %s
+    - Custom zellij plugin version: %s
+Consider updating either of the two.]],
+            backend_version,
+            version
+        )
+        vim.notify(msg, vim.log.levels.WARN)
+    end
 end
 
 --- Execute a command on our custom zellij plugin in /rust

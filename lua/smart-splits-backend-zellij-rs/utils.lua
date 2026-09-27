@@ -23,4 +23,36 @@ function M.error(message)
     M.assert(false, message)
 end
 
+---@param path string
+---@return string|nil content
+---@return string|nil error
+function M.read_file(path)
+    local file = io.open(path, 'r')
+    if not file then
+        return nil, 'Could not open file: ' .. path
+    end
+
+    local content = file:read('*a')
+    file:close()
+
+    return content
+end
+
+---@return string path Absolute path to this repository
+function M.repo_path()
+    local current_file = debug.getinfo(1, 'S').source:sub(2)
+    return vim.fs.dirname(vim.fs.dirname(vim.fs.dirname(current_file)))
+end
+
+---@return string|nil version
+function M.backend_version()
+    local version_file = vim.fs.abspath(vim.fs.joinpath(M.repo_path(), 'VERSION'))
+    local version = M.read_file(version_file)
+    if version ~= nil then
+        return vim.trim(version)
+    else
+        return nil
+    end
+end
+
 return M

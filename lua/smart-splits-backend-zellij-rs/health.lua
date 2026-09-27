@@ -1,5 +1,6 @@
 local zellij = require('smart-splits-backend-zellij-rs.zellij')
 local zellij_plugin = require('smart-splits-backend-zellij-rs.zellij_plugin')
+local utils = require('smart-splits-backend-zellij-rs.utils')
 
 local M = {}
 
@@ -44,12 +45,37 @@ function M.report()
                 .. plugin_url
         )
         return
-    elseif plugin_version ~= '' then
-        vim.health.ok('Custom zellij plugin is loaded and has permissions to run.')
-    else
+    elseif plugin_version == '' then
         vim.health.error(
             'Custom zellij plugin does not have permissions to run. Restart zellij to launch permissions form.'
         )
+        return
+    else
+        vim.health.ok('Custom zellij plugin is loaded and has permissions to run.')
+    end
+
+    local backend_version = tostring(utils.backend_version())
+    if backend_version == plugin_version then
+        vim.health.ok(string.format(
+            [[
+        Version matches:
+           - Smart splits backend version: %s
+           - Custom zellij plugin version: %s
+            ]],
+            backend_version,
+            plugin_version
+        ))
+    else
+        vim.health.warn(string.format(
+            [[
+        Version mismatch: 
+           - Smart splits backend version: %s
+           - Custom zellij plugin version: %s
+           Consider updating either of the two.
+        ]],
+            backend_version,
+            plugin_version
+        ))
     end
 end
 
