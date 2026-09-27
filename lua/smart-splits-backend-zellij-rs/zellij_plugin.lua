@@ -19,6 +19,16 @@ local function is_macos()
     return vim.fn.has('mac') == 1
 end
 
+function zellij_plugin.online_url()
+    local backend_version = tostring(utils.backend_version())
+    if backend_version == '' then
+        utils.error('Failed to find current version of backend-zellij-rs')
+    end
+    return 'https://github.com/smart-splits-nvim/backend-zellij-rs/releases/latest/download/'
+        .. backend_version
+        .. '/smart-splits-backend-zellij-rs.wasm'
+end
+
 --- Tries to resolve the custom url in the user config
 ---@return string|nil
 local function find_config_url()
@@ -140,7 +150,7 @@ end
 local _plugin_url = nil
 
 --- Find the name of the plugin
----@return string|nil
+---@return string
 function zellij_plugin.url()
     if _plugin_url ~= nil then
         return _plugin_url
@@ -164,7 +174,7 @@ function zellij_plugin.url()
         return _plugin_url
     end
 
-    return nil
+    return zellij_plugin.online_url()
 end
 
 --- Execute a command on our custom zellij plugin in /rust
