@@ -41,7 +41,7 @@ impl ZellijPlugin for State {
                     EventType::ActionComplete,
                 ]);
                 self.permissions_granted = true;
-                self.make_invisible();
+                make_invisible();
                 if let Some(pipe_message) = self.launch_pipe.take() {
                     self.pipe(pipe_message);
                 }
@@ -53,7 +53,7 @@ impl ZellijPlugin for State {
                 self.pane_manifest = pane_manifest;
             }
             Event::ActionComplete(Action::NewPane { .. }, new_pane_id, context) => {
-                utils::new_pane_callback(new_pane_id, context);
+                utils::new_pane_callback(new_pane_id, &context);
             }
 
             _ => {}
@@ -133,35 +133,33 @@ fn write_error<E: std::fmt::Display>(source: &PipeSource, err: E) {
     utils::write_to_pipe(source, &format!("ERROR: {err}"));
 }
 
-impl State {
-    fn make_invisible(&self) {
-        // We can not use `hide_self()` or `close_self()`, because that will prevent `PaneUpdate` and
-        // `TabUpdate` events from being triggered.
-        // Workaround: Force pane to have 0 width/height and make it floating.
+fn make_invisible() {
+    // We can not use `hide_self()` or `close_self()`, because that will prevent `PaneUpdate` and
+    // `TabUpdate` events from being triggered.
+    // Workaround: Force pane to have 0 width/height and make it floating.
 
-        let ids = get_plugin_ids();
-        let pane_id = PaneId::Plugin(ids.plugin_id);
-        let Some(pane) = get_pane_info(pane_id) else {
-            return;
-        };
+    let ids = get_plugin_ids();
+    let pane_id = PaneId::Plugin(ids.plugin_id);
+    let Some(pane) = get_pane_info(pane_id) else {
+        return;
+    };
 
-        // Ensure plugin pane is floating
-        if !pane.is_floating {
-            toggle_pane_embed_or_eject_for_pane_id(pane_id);
-        }
-
-        // Hide in top left corner with 0 size
-        let mut coordinates = FloatingPaneCoordinates::default()
-            .with_x_fixed(0)
-            .with_y_fixed(0)
-            .with_width_fixed(0)
-            .with_height_fixed(0);
-        coordinates.pinned = Some(false);
-        coordinates.borderless = Some(true);
-
-        change_floating_panes_coordinates(vec![(pane_id, coordinates)]);
-
-        // Don't allow the pane to receive keyboard focus
-        set_selectable(false);
+    // Ensure plugin pane is floating
+    if !pane.is_floating {
+        toggle_pane_embed_or_eject_for_pane_id(pane_id);
     }
+
+    // Hide in top left corner with 0 size
+    let mut coordinates = FloatingPaneCoordinates::default()
+        .with_x_fixed(0)
+        .with_y_fixed(0)
+        .with_width_fixed(0)
+        .with_height_fixed(0);
+    coordinates.pinned = Some(false);
+    coordinates.borderless = Some(true);
+
+    change_floating_panes_coordinates(vec![(pane_id, coordinates)]);
+
+    // Don't allow the pane to receive keyboard focus
+    set_selectable(false);
 }

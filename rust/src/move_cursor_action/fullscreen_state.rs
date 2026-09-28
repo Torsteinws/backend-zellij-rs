@@ -23,8 +23,9 @@ pub fn get_fullscreen_state(pane: &PaneInfo, tab: &TabInfo) -> FullscreenState {
     }
 }
 
+#[expect(clippy::match_same_arms)]
 pub fn set_fullscreen_state(current_state: FullscreenState, next_state: FullscreenState) {
-    use FullscreenState::*;
+    use FullscreenState::{Fullscreen, NoUiFullscreen, Normal};
     match (current_state, next_state) {
         (Normal, Fullscreen) => toggle_focus_fullscreen(),
         (Normal, NoUiFullscreen) => toggle_focus_no_ui_fullscreen(),

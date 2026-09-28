@@ -23,7 +23,7 @@ pub fn parse_input(pipe_message: &PipeMessage) -> Result<ParsedCommand, ParseErr
 
     match command {
         cli::Command::Move(action) => {
-            let direction = parse_move_payload(&pipe_message.payload)?;
+            let direction = parse_move_payload(pipe_message.payload.as_deref())?;
             let options = parse_move_options(&pipe_message.args)?;
             Ok(ParsedCommand::Move(ParsedMoveCommand {
                 command: action,
@@ -35,7 +35,7 @@ pub fn parse_input(pipe_message: &PipeMessage) -> Result<ParsedCommand, ParseErr
     }
 }
 
-fn parse_move_payload(input: &Option<String>) -> Result<Direction, ParseError> {
+fn parse_move_payload(input: Option<&str>) -> Result<Direction, ParseError> {
     let Some(payload) = input.as_ref() else {
         return Err(ParseError::MissingPayload);
     };
@@ -78,7 +78,7 @@ pub fn parse_bool_option(
         "false" => Ok(false),
         _ => Err(ParseError::InvalidBooleanValue {
             key,
-            value: value.to_string(),
+            value: value.clone(),
         }),
     }
 }

@@ -1,7 +1,9 @@
-use crate::cli::options;
 use crate::cli::Options;
-use crate::move_cursor_action::fullscreen_state::*;
-use crate::move_cursor_action::geometry::*;
+use crate::cli::options;
+use crate::move_cursor_action::fullscreen_state::{
+    FullscreenState, get_fullscreen_state, set_fullscreen_state,
+};
+use crate::move_cursor_action::geometry::{Point, Rect, find_missing_rect};
 use crate::utils;
 use std::cell::OnceCell;
 use thiserror::Error;
@@ -172,8 +174,8 @@ impl<'a> MoveCursorAction<'a> {
     fn get_cursor(pane: &PaneInfo) -> Option<Point> {
         pane.cursor_coordinates_in_pane.map(|cursor| {
             Point::new(
-                (pane.pane_x + cursor.0) as isize,
-                (pane.pane_y + cursor.1) as isize,
+                (pane.pane_x + cursor.0).cast_signed(),
+                (pane.pane_y + cursor.1).cast_signed(),
             )
         })
     }
@@ -275,7 +277,7 @@ impl<'a> MoveCursorAction<'a> {
                     result.clear();
                     result.push(pane);
                 } else if delta == largest_delta {
-                    result.push(pane)
+                    result.push(pane);
                 }
             }
             result
@@ -288,13 +290,14 @@ impl<'a> MoveCursorAction<'a> {
         let wrap_target = {
             let mut result: Option<&PaneInfo> = None;
 
-            let origin = match self.current_pane()?.is_fullscreen {
-                true => current_pane_geometry.center(),
-                false => match self.get_current_cursor() {
-                    Some(cursor) => cursor,
-                    None => current_pane_geometry.center(),
-                },
+            // Find the current logical position.
+            let is_fullscreen = self.current_pane()?.is_fullscreen;
+            let cursor = if is_fullscreen {
+                None
+            } else {
+                self.get_current_cursor()
             };
+            let origin = cursor.unwrap_or_else(|| current_pane_geometry.center());
 
             for pane in &opposing_panes {
                 let target = Rect::from_pane(pane);
@@ -338,10 +341,10 @@ impl<'a> MoveCursorAction<'a> {
                 Direction::Down => target.is_under(&origin),
             };
 
-            // The target pane must align on the secondary axis to be a valid candidate
-            let is_aligned = match direction.is_horizontal() {
-                true => origin.rows_overlap(&target),
-                false => origin.cols_overlap(&target),
+            let is_aligned = if direction.is_horizontal() {
+                origin.rows_overlap(&target)
+            } else {
+                origin.cols_overlap(&target)
             };
 
             if in_direction && is_aligned {
@@ -378,15 +381,15 @@ impl<'a> MoveCursorAction<'a> {
 
         let tab = self.current_tab()?;
 
-        let perimeter_cols = tab.viewport_columns as isize;
-        let perimeter_rows = tab.viewport_rows as isize;
+        let perimeter_cols = tab.viewport_columns.cast_signed();
+        let perimeter_rows = tab.viewport_rows.cast_signed();
 
-        let max_x0 = tab.display_area_columns as isize - perimeter_cols;
-        let max_y0 = tab.display_area_rows as isize - perimeter_rows;
+        let x_max = tab.display_area_columns.cast_signed() - perimeter_cols;
+        let y_max = tab.display_area_rows.cast_signed() - perimeter_rows;
 
         let mut perimeters: Vec<Rect> = vec![];
-        for x in 0..=max_x0 {
-            for y in 0..=max_y0 {
+        for x in 0..=x_max {
+            for y in 0..=y_max {
                 perimeters.push(Rect {
                     x,
                     y,

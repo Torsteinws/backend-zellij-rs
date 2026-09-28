@@ -1,7 +1,6 @@
 use std::str::FromStr;
 use thiserror::Error;
 
-#[allow(clippy::enum_variant_names)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MoveBehavior {
     Normal,

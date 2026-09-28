@@ -3,7 +3,7 @@ use zellij_tile::prelude::{actions::Action, *};
 
 pub fn write_to_pipe(source: &PipeSource, message: &str) {
     if let PipeSource::Cli(pipe_id) = source {
-        cli_pipe_output(pipe_id, &format!("{}\n", message));
+        cli_pipe_output(pipe_id, &format!("{message}\n"));
     }
 }
 
@@ -47,13 +47,13 @@ pub fn new_pane(direction: Direction) {
     // The pane must be spawned before we can try to move it.
 }
 
-/// Should be called by plugin root after new_pane(direction) has spawned a new pane. Like this:
+/// Should be called by plugin root after `new_pane(direction)` has spawned a new pane. Like this:
 /// ```
 /// Event::ActionComplete(Action::NewPane { .. }, new_pane_id, context) => {
 ///     utils::new_pane_callback(new_pane_id, context);
 /// }
 /// ```
-pub fn new_pane_callback(new_pane_id: Option<PaneId>, context: BTreeMap<String, String>) {
+pub fn new_pane_callback(new_pane_id: Option<PaneId>, context: &BTreeMap<String, String>) {
     let Some(pane_id) = new_pane_id else { return };
 
     let Some(diection_str) = context.get("direction") else {

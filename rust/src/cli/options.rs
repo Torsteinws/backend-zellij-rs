@@ -40,7 +40,9 @@ impl FromStr for FullscreenBehavior {
 }
 
 #[derive(Error, Debug, Clone, PartialEq, Eq)]
-#[error("invalid value for fullscreen behavior. Got \"{value}\", expected one of \"exit\", \"keep\", \"default\"")]
+#[error(
+    "invalid value for fullscreen behavior. Got \"{value}\", expected one of \"exit\", \"keep\", \"default\""
+)]
 pub struct ParseFullscreenBehaviorError {
     value: String,
 }

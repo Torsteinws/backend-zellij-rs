@@ -25,10 +25,10 @@ pub struct Rect {
 impl Rect {
     pub fn from_pane(pane: &PaneInfo) -> Rect {
         Rect {
-            x: pane.pane_x as isize,
-            y: pane.pane_y as isize,
-            cols: pane.pane_columns as isize,
-            rows: pane.pane_rows as isize,
+            x: pane.pane_x.cast_signed(),
+            y: pane.pane_y.cast_signed(),
+            cols: pane.pane_columns.cast_signed(),
+            rows: pane.pane_rows.cast_signed(),
         }
     }
 
