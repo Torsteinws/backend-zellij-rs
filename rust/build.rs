@@ -7,12 +7,17 @@ fn main() {
     let version_path = Path::new("..").join("VERSION");
 
     let version = fs::read_to_string(&version_path)
-        .unwrap_or_else(|e| panic!("Failed to read VERSION file at {:?}: {}", version_path, e))
+        .unwrap_or_else(|e| {
+            panic!(
+                "Failed to read VERSION file at {}: {e}",
+                version_path.display()
+            )
+        })
         .trim()
         .to_string();
 
     // Expose it to the crate as an env var usable via env!("VERSION").
-    println!("cargo:rustc-env=VERSION={}", version);
+    println!("cargo:rustc-env=VERSION={version}");
 
     // Re-run this build script if the VERSION file changes.
     println!("cargo:rerun-if-changed={}", version_path.display());
