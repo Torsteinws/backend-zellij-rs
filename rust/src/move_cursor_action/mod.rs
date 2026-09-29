@@ -1,5 +1,6 @@
 mod move_cursor;
 pub use move_cursor::MoveCursorAction;
+pub use move_cursor::MoveCursorError;
 pub use move_cursor::TabBehavior;
 
 pub mod geometry;

@@ -189,7 +189,19 @@ local function simple_exec(cmd_name, payload, cmd_opts, opts)
         error('FATAL: Did not find a valid url for the internal zellij plugin.')
     end
 
-    local cmd = { zellij.bin_name(), 'action', 'pipe', '--plugin', plugin_url, '--name', cmd_name }
+    local cmd = {
+        zellij.bin_name(),
+        'action',
+        'pipe',
+        '--plugin',
+        plugin_url,
+        '--name',
+        cmd_name,
+        '--plugin-configuration',
+        '""',
+        '--floating-plugin',
+        'true',
+    }
 
     cmd_opts = cmd_opts or {}
     if #cmd_opts > 0 then
@@ -265,7 +277,19 @@ function zellij_plugin.exec(cmd_name, payload, cmd_opts, opts)
         error('FATAL: Did not find a valid url for the internal zellij plugin.')
     end
 
-    local cmd = { zellij.bin_name(), 'action', 'pipe', '--plugin', plugin_url, '--name', cmd_name }
+    local cmd = {
+        zellij.bin_name(),
+        'action',
+        'pipe',
+        '--plugin',
+        plugin_url,
+        '--name',
+        cmd_name,
+        '--plugin-configuration',
+        '""',
+        '--floating-plugin',
+        'true',
+    }
 
     cmd_opts = cmd_opts or {}
     if #cmd_opts > 0 then
@@ -303,7 +327,14 @@ end
 
 ---@return vim.SystemObj
 function zellij_plugin.start_or_reload()
-    return vim.system({ zellij.bin_name(), 'action', 'start-or-reload-plugin', zellij_plugin.url() })
+    return vim.system({
+        zellij.bin_name(),
+        'action',
+        'start-or-reload-plugin',
+        zellij_plugin.url(),
+        '--configuration',
+        '""',
+    })
 end
 
 ---@param opts? vim.SystemOpts

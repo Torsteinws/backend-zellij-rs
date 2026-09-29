@@ -3,8 +3,6 @@ use std::collections::BTreeMap;
 use thiserror::Error;
 use zellij_tile::prelude::Direction;
 
-use zellij_tile::prelude::PipeMessage;
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ParsedMoveCommand {
     pub command: cli::MoveBehavior,
@@ -18,13 +16,17 @@ pub enum ParsedCommand {
     Version,
 }
 
-pub fn parse_input(pipe_message: &PipeMessage) -> Result<ParsedCommand, ParseError> {
-    let command: cli::Command = pipe_message.name.parse()?;
+pub fn parse_input(
+    command_name: &str,
+    payload: Option<&str>,
+    pipe_args: &BTreeMap<String, String>,
+) -> Result<ParsedCommand, ParseError> {
+    let command: cli::Command = command_name.parse()?;
 
     match command {
         cli::Command::Move(action) => {
-            let direction = parse_move_payload(pipe_message.payload.as_deref())?;
-            let options = parse_move_options(&pipe_message.args)?;
+            let direction = parse_move_payload(payload)?;
+            let options = parse_move_options(pipe_args)?;
             Ok(ParsedCommand::Move(ParsedMoveCommand {
                 command: action,
                 direction,
